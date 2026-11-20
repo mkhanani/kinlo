@@ -1,0 +1,60 @@
+# Stage 2 of 3: Staging.
+# Every push to the `staging` branch is tested, then built as "kinlo staging":
+# a separate app (app.kinlo.desktop.staging) with its own data folder and keychain entries.
+# It installs next to the released app and never touches its data.
+# Installers are attached to the workflow run. No release is created.
+name: Staging
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    uses: ./.github/workflows/testing.yml
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Windows, os: windows-latest, args: "" }
+          - { name: macOS Apple Silicon, os: macos-latest, args: "--target aarch64-apple-darwin" }
+          - { name: macOS Intel, os: macos-latest, args: "--target x86_64-apple-darwin" }
+          - { name: Linux, os: ubuntu-22.04, args: "" }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --config src-tauri/tauri.staging.conf.json ${{ matrix.args }}
+          uploadWorkflowArtifacts: true
+          uploadUpdaterJson: false

@@ -1,3 +1,5 @@
+import { channelLabel } from "@/lib/channel";
+
 interface Props {
   size?: number;
   className?: string;
@@ -18,6 +20,14 @@ export function Wordmark({ className }: { className?: string }) {
     <span className={`inline-flex items-center gap-2 ${className ?? ""}`}>
       <LogoMark />
       <span className="text-md font-semibold tracking-[-0.03em] leading-none">kinlo</span>
+      {channelLabel && (
+        <span
+          className="rounded-full border border-hairline px-1.5 py-px text-xs leading-4 text-muted"
+          title={`This is a ${channelLabel} build. Its data is kept apart from the released app.`}
+        >
+          {channelLabel}
+        </span>
+      )}
     </span>
   );
 }
