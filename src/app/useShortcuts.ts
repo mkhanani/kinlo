@@ -1,10 +1,12 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUI } from "@/store/ui";
+import { useSettings } from "./settings";
 
 /** Global keyboard shortcuts. Ctrl on Windows/Linux, Cmd on macOS. */
 export function useShortcuts() {
   const navigate = useNavigate();
+  const { pipelineEnabled } = useSettings();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -21,12 +23,12 @@ export function useShortcuts() {
         e.preventDefault();
         ui.toggleAssistant();
       } else if (routes[key]) {
-        if (key === "3" && !ui.pipelineEnabled) return;
+        if (key === "3" && !pipelineEnabled) return;
         e.preventDefault();
         navigate(routes[key]);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [navigate]);
+  }, [navigate, pipelineEnabled]);
 }

@@ -5,6 +5,7 @@ import type { LucideIcon } from "lucide-react";
 import { Wordmark } from "@/components/Logo";
 import { useUI } from "@/store/ui";
 import { modKey } from "@/lib/platform";
+import { useSettings } from "@/app/settings";
 
 interface Item {
   to: string;
@@ -14,7 +15,7 @@ interface Item {
 }
 
 export function Sidebar() {
-  const pipelineEnabled = useUI((s) => s.pipelineEnabled);
+  const { pipelineEnabled } = useSettings();
   const toggleAssistant = useUI((s) => s.toggleAssistant);
   const assistantOpen = useUI((s) => s.assistantOpen);
   const setPaletteOpen = useUI((s) => s.setPaletteOpen);
