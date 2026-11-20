@@ -33,13 +33,16 @@ jobs:
           - { name: macOS Intel, os: macos-latest, args: "--target x86_64-apple-darwin" }
           - { name: Linux, os: ubuntu-22.04, args: "" }
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - name: Install Linux dependencies
+        timeout-minutes: 10
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev
+          APT="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o DPkg::Lock::Timeout=120"
+          $APT update
+          $APT install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev
       - uses: actions/setup-node@v7
         with:
           node-version: 22

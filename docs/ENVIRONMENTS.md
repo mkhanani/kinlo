@@ -13,7 +13,7 @@ feature branch ──PR──▶ staging ──PR──▶ main ──tag v*─�
 
 | | Testing | Staging | Production |
 |---|---|---|---|
-| Trigger | every push and pull request | push to `staging` | tag `v*` on `main` |
+| Trigger | every pull request, and each merge to `main` | push to `staging` | tag `v*` on `main` |
 | Workflow | `.github/workflows/testing.yml` | `staging.yml` | `production.yml` |
 | What runs | type check, unit tests, frontend build, `cargo fmt`, `clippy`, Rust tests, compile check on Windows and macOS | all of Testing, then installers for every platform | all of Testing, tag checks, then installers for every platform |
 | Output | pass or fail | installers attached to the workflow run | a **draft** GitHub Release |
@@ -60,8 +60,17 @@ git tag v0.1.0 && git push origin v0.1.0
 
 5. Review the draft release, then publish.
 
-## One-time repository setup
+## Repository setup
 
-- Create the `staging` branch from `main`.
-- Protect `main` and `staging`: require a pull request and require the Testing checks to pass.
-- Optional: restrict who can push `v*` tags (Settings → Tags → rulesets).
+`main` and `staging` exist. What makes the stages a gate rather than a habit is branch protection on both, set in Settings → Rules → Rulesets:
+
+- Require a pull request before merging.
+- Require these status checks to pass:
+  - `Frontend (types, tests, build)`
+  - `Rust (fmt, clippy, tests)`
+  - `Compiles on windows-latest`
+  - `Compiles on macos-latest`
+- Block force pushes and deletions.
+- Optional: a tag ruleset that restricts who can create `v*` tags.
+
+After a `staging` → `main` merge, GitHub shows `staging` as a commit or two behind `main`. Those are merge commits only and can be ignored.
