@@ -1,0 +1,33 @@
+[package]
+name = "kinlo"
+version = "0.1.0"
+description = "Local-first personal CRM for desktop"
+authors = ["kinlo contributors"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "kinlo_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.6", features = [] }
+
+[dependencies]
+# macos-private-api enables the transparent window that vibrancy needs. It is a no-op on other systems.
+tauri = { version = "2.12.7", features = ["macos-private-api"] }
+tauri-plugin-os = "2.4.0"
+tauri-plugin-opener = "2.7.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+window-vibrancy = "0.8.1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

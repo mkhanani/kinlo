@@ -1,0 +1,21 @@
+{
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "kinlo",
+        "width": 1200,
+        "height": 780,
+        "minWidth": 900,
+        "minHeight": 600,
+        "center": true,
+        "decorations": true,
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 16, "y": 20 },
+        "resizable": true
+      }
+    ]
+  }
+}

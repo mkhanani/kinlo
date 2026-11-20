@@ -1,0 +1,213 @@
+@import "@fontsource-variable/inter";
+@import "tailwindcss";
+
+/*
+ * kinlo design tokens.
+ * Monochrome only. The single non-grey color is --danger, for destructive actions.
+ */
+
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0a0a0b;
+  --fg: #f4f4f5;
+  --muted: #a1a1aa;
+  --subtle: #71717a;
+  --danger: #c2524f;
+
+  --glass: rgb(255 255 255 / 0.07);
+  --glass-strong: rgb(255 255 255 / 0.1);
+  --glass-hover: rgb(255 255 255 / 0.09);
+  --hairline: rgb(255 255 255 / 0.1);
+  --control: rgb(255 255 255 / 0.06);
+  --control-hover: rgb(255 255 255 / 0.1);
+  --active: rgb(255 255 255 / 0.12);
+  --ring: rgb(255 255 255 / 0.35);
+  --shadow: 0 12px 40px -12px rgb(0 0 0 / 0.55);
+  --float: rgb(24 24 27 / 0.86);
+
+  /* Window backdrop when the OS gives us no native blur (Linux, browser). */
+  --backdrop: radial-gradient(1200px 700px at 15% -10%, #18181b 0%, transparent 60%),
+    radial-gradient(900px 600px at 110% 110%, #131316 0%, transparent 55%), #0a0a0b;
+  /* Thin tint laid over native Mica / Acrylic / vibrancy so text stays legible. */
+  --native-tint: rgb(10 10 11 / 0.55);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f6f5;
+  --fg: #0a0a0b;
+  --muted: #6b6b70;
+  --subtle: #8e8e93;
+  --danger: #b0413e;
+
+  --glass: rgb(255 255 255 / 0.6);
+  --glass-strong: rgb(255 255 255 / 0.7);
+  --glass-hover: rgb(255 255 255 / 0.68);
+  --hairline: rgb(0 0 0 / 0.1);
+  --control: rgb(0 0 0 / 0.04);
+  --control-hover: rgb(0 0 0 / 0.07);
+  --active: rgb(0 0 0 / 0.07);
+  --ring: rgb(0 0 0 / 0.3);
+  --shadow: 0 12px 40px -16px rgb(0 0 0 / 0.18);
+  --float: rgb(255 255 255 / 0.85);
+
+  --backdrop: radial-gradient(1200px 700px at 15% -10%, #ffffff 0%, transparent 60%),
+    radial-gradient(900px 600px at 110% 110%, #ececeb 0%, transparent 55%), #f6f6f5;
+  --native-tint: rgb(246 246 245 / 0.55);
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-danger: var(--danger);
+  --color-glass: var(--glass);
+  --color-glass-strong: var(--glass-strong);
+  --color-glass-hover: var(--glass-hover);
+  --color-hairline: var(--hairline);
+  --color-control: var(--control);
+  --color-control-hover: var(--control-hover);
+  --color-active: var(--active);
+
+  /* Type scale: 12, 13, 14, 16, 20, 28 */
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 13px;
+  --text-sm--line-height: 18px;
+  --text-base: 14px;
+  --text-base--line-height: 20px;
+  --text-md: 16px;
+  --text-md--line-height: 24px;
+  --text-lg: 20px;
+  --text-lg--line-height: 28px;
+  --text-xl: 28px;
+  --text-xl--line-height: 34px;
+
+  --radius-panel: 14px;
+  --radius-control: 10px;
+
+  --shadow-soft: var(--shadow);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  html {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv11", "ss01";
+    /* Body background is explicit: solid with a soft static gradient. */
+    background: var(--backdrop);
+  }
+
+  /* With native window effects, let the OS material show through. */
+  html[data-effects="native"] {
+    background: var(--native-tint);
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+    user-select: none;
+    cursor: default;
+  }
+
+  input,
+  textarea,
+  [contenteditable="true"] {
+    user-select: text;
+    cursor: text;
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+    font-weight: 600;
+  }
+
+  ::selection {
+    background: var(--active);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--hairline);
+    border-radius: 10px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  /* Glass panel: translucent fill, 24px blur, hairline border, one soft shadow. */
+  .glass {
+    background: var(--glass);
+    -webkit-backdrop-filter: blur(24px) saturate(1.2);
+    backdrop-filter: blur(24px) saturate(1.2);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow);
+  }
+
+  .glass-strong {
+    background: var(--glass-strong);
+    -webkit-backdrop-filter: blur(24px) saturate(1.2);
+    backdrop-filter: blur(24px) saturate(1.2);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow);
+  }
+
+  /* Floating surfaces (dialogs, palette, menus) sit over content, so they carry a denser base. */
+  .glass-float {
+    background: var(--float);
+    -webkit-backdrop-filter: blur(24px) saturate(1.2);
+    backdrop-filter: blur(24px) saturate(1.2);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow);
+  }
+
+  .control {
+    background: var(--control);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-control);
+    transition: background-color 180ms var(--ease-out);
+  }
+  .control:hover {
+    background: var(--control-hover);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
