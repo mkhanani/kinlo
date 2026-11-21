@@ -15,13 +15,44 @@ feature branch ──PR──▶ staging ──PR──▶ main ──tag v*─�
 |---|---|---|---|
 | Trigger | every pull request, and each merge to `main` | push to `staging` | "Run workflow" on `main`, or a tag `v*` on `main` |
 | Workflow | `.github/workflows/testing.yml` | `staging.yml` | `production.yml` |
-| What runs | type check, unit tests, frontend build, `cargo fmt`, `clippy`, Rust tests, compile check on Windows and macOS | all of Testing, then installers for every platform | all of Testing, tag checks, then installers for every platform |
+| What runs | type check, unit tests, frontend build, `cargo fmt`, `clippy`, Rust tests, compile check on Windows and macOS | all of Testing, then installers for every platform | all of Testing, tag checks, then signed installers for every platform and the update file |
 | Output | pass or fail | installers attached to the workflow run | a **draft** GitHub Release |
 | Reaches users | no | no | only after someone presses Publish |
 
 Staging and Production both run the full Testing suite first. A build never starts if a check fails.
 
-Production has extra guards: the version must equal the app version (`v0.1.0` for version `0.1.0`), the commit must already be on `main`, and a version that has been published cannot be released again. A release started from any other branch fails before anything is built.
+Production has extra guards: the version must equal the app version (`v0.1.0` for version `0.1.0`), the commit must already be on `main`, the update key must be set, and a version that has been published cannot be released again. A release started from any other branch fails before anything is built.
+
+## Updates
+
+The released app has a **Check for updates** button in Settings. It is the only way kinlo ever looks for a new version: nothing is checked in the background or at startup. The code is in `src-tauri/src/updates.rs` and `src/features/updates/`, and uses Tauri's updater plugin.
+
+1. Pressing the button fetches `latest.json` from the newest published release (`https://github.com/mkhanani/kinlo/releases/latest/download/latest.json`). A draft is not "published", so nobody is offered a release before Publish is pressed.
+2. If the version there is newer, **Update and restart** downloads the file for that system and kind of install.
+3. The download is checked against the public key built into the app (`plugins.updater.pubkey` in `tauri.conf.json`). The signature also names the version it was made for, and that must match (`requireSignedVersion`), so an old release cannot be passed off as a new one. Anything that fails is discarded.
+4. It is installed and kinlo starts again. On Windows the installer does this itself, showing a progress bar. A `.deb` or `.rpm` install asks for the system password.
+
+Dev and staging builds do not have the button: their identifier is not the released one, and the Rust side refuses as well.
+
+On the release side, the Production workflow builds with `src-tauri/tauri.release.conf.json`, which turns on signing, so every download gets a `.sig` file next to it. When all four builds are done, the last job runs `scripts/make-update-manifest.mjs`, which writes `latest.json` from those signatures and attaches it to the draft. It refuses to write the file if any system is missing or was signed for a different version.
+
+### The update key
+
+Signing needs a private key, kept as the repository secret `TAURI_SIGNING_PRIVATE_KEY` (Settings → Secrets and variables → Actions). It has no password. Production stops before building if the secret is missing.
+
+- **Keep a copy somewhere safe**, such as a password manager. GitHub never shows a secret again.
+- **If it is lost**, installed copies of kinlo can no longer be updated from the button, because nothing new can be signed in a way they accept. People would have to download the next version by hand once, built with a new key.
+- **If it leaks**, treat it as lost: make a new one and replace the public key. By itself the key is not enough to push an update to anyone, since the app only downloads from this repository's releases, but it is the check that protects people if the repository or a download were tampered with.
+
+To make a new key and switch to it:
+
+```bash
+npm run tauri signer generate -- --ci -w kinlo-update-key.txt
+```
+
+Put the contents of `kinlo-update-key.txt` in the secret, put the contents of `kinlo-update-key.txt.pub` in `plugins.updater.pubkey`, and delete both files. Only versions released after that carry the new key.
+
+This is not code signing. It lets kinlo trust its own updates; it does not stop Windows or macOS from warning about an unsigned app on first install.
 
 ## Running on Windows, macOS and Linux
 
@@ -51,7 +82,7 @@ The operating system derives the data folder from the identifier, so each flavor
 
 The icons are drawn in `assets/icon/` as four SVG files: the released app and the staging flavor, each in a large version and a heavier one for 16 to 48px, where thin lines disappear. `npm run icons` rebuilds every icon file and the Windows installer pictures from them. To change the logo, replace those drawings and run it.
 
-The differences live in two small overlay files, `src-tauri/tauri.dev.conf.json` and `src-tauri/tauri.staging.conf.json`, merged over `tauri.conf.json`. The app code is identical. Unknown identifiers are treated as dev, never as production.
+The differences live in two small overlay files, `src-tauri/tauri.dev.conf.json` and `src-tauri/tauri.staging.conf.json`, merged over `tauri.conf.json`. A third, `tauri.release.conf.json`, only turns on update signing and is used by the Production workflow alone, so building from source needs no key. The app code is identical. Unknown identifiers are treated as dev, never as production.
 
 Rule for new code: anything stored outside the app data folder must be keyed by channel.
 
@@ -78,7 +109,7 @@ npm run check              # everything the Testing stage runs, locally
      ```
 
    Both run the same checks and builds. Started from GitHub, no tag exists until the draft is published; GitHub creates it then.
-6. Review the draft release, then publish.
+6. Review the draft release. It should hold the installers, a `.sig` file for each, and `latest.json`. Then publish. From that moment, **Check for updates** in an installed kinlo offers the new version.
 
 ## Repository setup
 

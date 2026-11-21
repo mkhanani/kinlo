@@ -1,6 +1,6 @@
 [package]
 name = "kinlo"
-version = "0.1.1"
+version = "0.2.0"
 description = "Local-first personal CRM for desktop"
 authors = ["kinlo contributors"]
 license = "MIT"
@@ -31,6 +31,8 @@ tauri-plugin-http = "2.9.0"
 keyring = "4.2.0"
 # The system's own "Save as" and "Open" dialogs, for export and import.
 tauri-plugin-dialog = "2.8.4"
+# Downloads and installs a new version when the person asks for it, after checking its signature.
+tauri-plugin-updater = "2.14.1"
 
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
 window-vibrancy = "0.8.1"

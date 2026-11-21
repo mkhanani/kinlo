@@ -2,11 +2,16 @@
 # A release is checked, tested, built for every platform and attached to a DRAFT release.
 # Nothing is public until a person reviews the draft and presses Publish.
 #
+# Every download is signed with the update key (the TAURI_SIGNING_PRIVATE_KEY secret), and
+# the last job adds latest.json, the file a running kinlo reads when someone presses
+# "Check for updates". An installed kinlo only accepts a download carrying that signature.
+#
 # There are two ways to start one, and they do the same thing:
 #   - push a tag `v*` that is on `main`, or
 #   - in the Actions tab, open this workflow, press "Run workflow" on `main` and type the
 #     version (for example v0.1.0). No tag is needed first: GitHub creates it from that
-#     commit when the draft is published.
+#     commit when the draft is published. That new tag starts this workflow once more;
+#     the run sees the release is already published and stops without building.
 name: Production
 
 on:
@@ -36,6 +41,9 @@ jobs:
     name: Release is allowed
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      # "false" when there is nothing to do: see the second step.
+      proceed: ${{ steps.published.outputs.proceed }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -46,33 +54,58 @@ jobs:
             echo "::error::\"$RELEASE_TAG\" is not a version like v0.1.0."
             exit 1
           fi
+      - name: This version has not been published already
+        id: published
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # A draft for this version may exist from an earlier try and is reused.
+          published=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.draft == false' 2>/dev/null || echo "false")
+          if [ "$published" != "true" ]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            # Publishing a draft creates its tag, and a new tag starts this workflow. The
+            # release it belongs to is already built and public, so there is nothing to do.
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$RELEASE_TAG is already published. This run was started by its tag being created, so there is nothing to build."
+            exit 0
+          fi
+          # Started by hand for a version that is already out: a published release is final.
+          echo "::error::$RELEASE_TAG has already been published. Bump the version and release that."
+          exit 1
       - name: Version matches the app
+        if: steps.published.outputs.proceed == 'true'
         run: node scripts/check-version.mjs "$RELEASE_TAG"
       - name: Commit is on main
+        if: steps.published.outputs.proceed == 'true'
         run: |
           git fetch origin main
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
             echo "::error::This commit is not on main. Production releases are cut from main only."
             exit 1
           fi
-      - name: This version has not been published already
+      - name: The update key is set
+        if: steps.published.outputs.proceed == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Only whether it exists. The key itself is given to the build step alone.
+          HAS_UPDATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
         run: |
-          # A draft for this version may exist from an earlier try and is reused.
-          # A published one is final: bump the version instead.
-          published=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.draft == false' 2>/dev/null || echo "false")
-          if [ "$published" = "true" ]; then
-            echo "::error::$RELEASE_TAG has already been published. Bump the version and release that."
+          if [ "$HAS_UPDATE_KEY" != "true" ]; then
+            echo "::error::The TAURI_SIGNING_PRIVATE_KEY secret is missing. Without it the release cannot be signed, and installed copies of kinlo would refuse it as an update. See docs/ENVIRONMENTS.md, \"The update key\"."
             exit 1
           fi
 
   test:
+    needs: verify
+    if: needs.verify.outputs.proceed == 'true'
     uses: ./.github/workflows/testing.yml
 
   build:
     name: Build ${{ matrix.name }}
     needs: [verify, test]
+    if: needs.verify.outputs.proceed == 'true'
     permissions:
       contents: write
     strategy:
@@ -108,6 +141,9 @@ jobs:
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs each download so an installed kinlo can tell it is genuine.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           tagName: ${{ env.RELEASE_TAG }}
           releaseName: kinlo ${{ env.RELEASE_TAG }}
@@ -115,7 +151,9 @@ jobs:
           # publishing the draft creates the tag from this commit.
           releaseCommitish: ${{ github.sha }}
           releaseBody: |
-            Download the file for your computer from the assets below.
+            Already using kinlo 0.2.0 or later? Open Settings, then Updates, and press Check for updates.
+
+            To install it fresh, download the file for your computer from the assets below. The `.sig` files and `latest.json` are for the updater and can be ignored.
 
             - **Windows:** the `-setup.exe` file
             - **macOS:** the `aarch64.dmg` file for Apple Silicon (M1 and later), the `x64.dmg` file for Intel
@@ -124,5 +162,34 @@ jobs:
             kinlo is not code-signed, so Windows and macOS warn you the first time you open it. The README explains how to get past that: https://github.com/mkhanani/kinlo#install
           releaseDraft: true
           prerelease: false
+          # latest.json is written once, by the next job, after every build has finished.
+          # Four builds each editing the same file could overwrite one another.
           uploadUpdaterJson: false
-          args: ${{ matrix.args }}
+          uploadUpdaterSignatures: true
+          args: --config src-tauri/tauri.release.conf.json ${{ matrix.args }}
+
+  manifest:
+    name: Update file
+    needs: [verify, build]
+    if: needs.verify.outputs.proceed == 'true'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Collect the signatures
+        run: gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "*.sig" --dir signatures
+      - name: Write latest.json
+        # Fails, and writes nothing, unless every system's download is there and signed
+        # for this version.
+        run: |
+          node scripts/make-update-manifest.mjs "$RELEASE_TAG" signatures > latest.json
+          cat latest.json
+      - name: Attach it to the draft
+        run: gh release upload "$RELEASE_TAG" latest.json --repo "$GITHUB_REPOSITORY" --clobber

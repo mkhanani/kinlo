@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/Switch";
 import type { SidesChoice, ThemePref } from "@/data/settings";
 import { AssistantSettings } from "@/features/assistant/AssistantSettings";
 import { DataSettings } from "@/features/transfer/DataSettings";
+import { UpdateSettings } from "@/features/updates/UpdateSettings";
 import { isTauri, modKey } from "@/lib/platform";
 import { useUI } from "@/store/ui";
 
@@ -109,6 +110,8 @@ export function SettingsPage() {
       {isTauri && <NotificationSettings />}
 
       <DataSettings />
+
+      <UpdateSettings />
     </Page>
   );
 }
