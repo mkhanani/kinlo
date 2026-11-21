@@ -14,6 +14,8 @@ export function renderApp(path = "/", settings: Partial<Settings> = {}) {
     assistantOpen: false,
     paletteOpen: false,
     contactForm: { open: false, contactId: null },
+    reminderForm: { open: false, reminderId: null, contactId: null },
+    dealForm: { open: false, dealId: null, contactId: null, stageId: null },
     peopleFilter: EMPTY_PEOPLE_FILTER,
   });
   localStorage.clear();

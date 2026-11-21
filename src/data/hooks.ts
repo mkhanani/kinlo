@@ -6,6 +6,9 @@ import type {
   ContactFilter,
   ContactInput,
   ContactPatch,
+  DealInput,
+  DealPatch,
+  DealWithContact,
   Interaction,
   InteractionInput,
   Reminder,
@@ -245,6 +248,59 @@ export function useOpenDeals() {
   return useQuery({
     queryKey: [...keys.deals, "open-summary"],
     queryFn: async () => ({ count: await data.countOpenDeals(), totals: await data.openDealTotals() }),
+  });
+}
+
+/** Every deal on the board, in stage and position order. */
+export function useDeals() {
+  return useQuery({ queryKey: [...keys.deals, "board"], queryFn: () => data.listDeals() });
+}
+
+/** Every change to a deal refreshes the board, the Home count and people's deal lists. */
+function useDealMutation<V, R>(run: (variables: V) => Promise<R>) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: run,
+    onSuccess: () => void client.invalidateQueries({ queryKey: keys.deals }),
+  });
+}
+
+export const useCreateDeal = () => useDealMutation((input: DealInput) => data.createDeal(input));
+
+export const useUpdateDeal = () =>
+  useDealMutation(async ({ id, patch, stageId }: { id: string; patch: DealPatch; stageId?: string }) => {
+    await data.updateDeal(id, patch);
+    // Changing the stage in the form puts the deal at the bottom of the new stage.
+    if (stageId) await data.moveDealToStage(id, stageId);
+  });
+
+export const useDeleteDeal = () => useDealMutation((id: string) => data.deleteDeal(id));
+
+export const useMoveDealToStage = () =>
+  useDealMutation(({ id, stageId }: { id: string; stageId: string }) => data.moveDealToStage(id, stageId));
+
+/**
+ * Drops a deal at a place on the board. The board updates at once from the list it is
+ * given, then the move is saved and the real order is read back.
+ */
+export function useDropDeal() {
+  const client = useQueryClient();
+  const boardKey = [...keys.deals, "board"];
+  return useMutation({
+    mutationFn: async (move: { id: string; stageId: string; position: number; needsRenumber: boolean; next: DealWithContact[] }) => {
+      await data.moveDeal(move.id, move.stageId, move.position);
+      if (move.needsRenumber) await data.renumberStage(move.stageId);
+    },
+    onMutate: async (move) => {
+      await client.cancelQueries({ queryKey: boardKey });
+      const previous = client.getQueryData<DealWithContact[]>(boardKey);
+      client.setQueryData<DealWithContact[]>(boardKey, move.next);
+      return { previous };
+    },
+    onError: (_error, _move, context) => {
+      if (context?.previous) client.setQueryData(boardKey, context.previous);
+    },
+    onSettled: () => void client.invalidateQueries({ queryKey: keys.deals }),
   });
 }
 

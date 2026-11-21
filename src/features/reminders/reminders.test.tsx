@@ -193,6 +193,26 @@ describe("Reminders screen", () => {
     expect([due.getDate(), due.getHours()]).toEqual([tomorrow.getDate(), 9]);
   });
 
+  it("choosing a person by typing fast and pressing Enter picks who you typed, and does not submit the form", async () => {
+    await createContact({ name: "Aaron Abbott" });
+    await createContact({ name: "Priya Raman" });
+    renderApp("/reminders");
+    fireEvent.click((await screen.findAllByRole("button", { name: /Add reminder/ }))[0]!);
+    const dialog = await screen.findByRole("dialog", { name: "Add reminder" });
+
+    const about = within(dialog).getByLabelText("About");
+    fireEvent.focus(about);
+    // The list opens showing everyone, Aaron first. Type and press Enter before it catches up.
+    await within(dialog).findByRole("option", { name: /Aaron Abbott/ });
+    type(about, "priya");
+    fireEvent.keyDown(about, { key: "Enter" });
+
+    expect(await within(dialog).findByRole("button", { name: "Remove Priya Raman" })).toBeInTheDocument();
+    // Still open: Enter chose a person, it did not save a reminder with no title.
+    expect(within(dialog).queryByText("Say what to be reminded of.")).not.toBeInTheDocument();
+    expect(await listReminders()).toEqual([]);
+  });
+
   it("ticking a reminder finishes it, and it can be brought back from Done", async () => {
     await createReminder({ title: "Send card", due_at: at(0) });
     renderApp("/reminders");

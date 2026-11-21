@@ -12,10 +12,12 @@ import type { SidesChoice, ThemePref } from "@/data/settings";
 import { isTauri } from "@/lib/platform";
 
 export function SettingsPage() {
-  const { theme, sides, userName } = useSettings();
+  const { theme, sides, userName, defaultCurrency } = useSettings();
   const save = useSaveSetting();
   const [name, setName] = useState(userName ?? "");
   useEffect(() => setName(userName ?? ""), [userName]);
+  const [currency, setCurrency] = useState(defaultCurrency);
+  useEffect(() => setCurrency(defaultCurrency), [defaultCurrency]);
 
   const themes: { value: ThemePref; label: string; icon: typeof Sun }[] = [
     { value: "system", label: "System", icon: Monitor },
@@ -52,6 +54,21 @@ export function SettingsPage() {
             ]}
           />
         </Row>
+        {sides !== "personal" && (
+          <Row label="Currency" hint="What new deals are valued in. Each deal can still use its own.">
+            <Input
+              aria-label="Currency"
+              value={currency}
+              maxLength={3}
+              onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+              onBlur={() => {
+                if (/^[A-Z]{3}$/.test(currency)) save("defaultCurrency", currency);
+                else setCurrency(defaultCurrency);
+              }}
+              className="!w-[76px] text-center"
+            />
+          </Row>
+        )}
         <Row label="Theme" hint="Follows your system unless you pick one.">
           <div className="control flex p-0.5 hover:!bg-control">
             {themes.map(({ value, label, icon: Icon }) => (
