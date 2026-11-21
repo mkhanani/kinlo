@@ -7,7 +7,7 @@ import { approvalMessage, cancelledMessage, pendingApprovals, runTurn } from "./
 import { useFocus } from "./focus";
 import { getKey } from "./keys";
 import { buildInstructions, QUICK_ADD_INSTRUCTIONS } from "./prompt";
-import { configFrom, createModel, explainError, PROVIDERS, type AiConfig } from "./providers";
+import { configFrom, createModel, errorDetail, explainError, PROVIDERS, type AiConfig } from "./providers";
 import { buildTools, isWriteTool } from "./tools";
 
 /** What is on screen while the assistant is still working on its reply. */
@@ -27,6 +27,8 @@ export interface ChatState {
   live: LiveItem[];
   working: boolean;
   error: string | null;
+  /** What the provider itself said about that error, with any key taken out. Shown, never saved. */
+  errorDetail: string | null;
   /** Answers to change cards given so far, while others in the same reply are still open. */
   decisions: Record<string, boolean>;
   /** Goes up each time the assistant has changed the user's data. */
@@ -72,6 +74,7 @@ const EMPTY = {
   live: [] as LiveItem[],
   working: false,
   error: null,
+  errorDetail: null,
   decisions: {} as Record<string, boolean>,
   draft: "",
 };
@@ -96,17 +99,18 @@ function createChat(options: ChatOptions) {
     async function run(settings: Settings) {
       const config = configFrom(settings);
       if (!config) {
-        set({ error: "Connect a model in Settings first." });
+        set({ error: "Connect a model in Settings first.", errorDetail: null });
         return;
       }
       const info = PROVIDERS[config.provider];
       const side = currentSide(settings);
       const mine = ++generation;
       controller = new AbortController();
-      set({ working: true, error: null, live: [] });
+      set({ working: true, error: null, errorDetail: null, live: [] });
 
+      let key: string | null = null;
       try {
-        const key = await getKey(config.provider);
+        key = await getKey(config.provider);
         if (info.needsKey && !key) {
           set({ error: `Add your ${info.label} key in Settings first.` });
           return;
@@ -147,7 +151,12 @@ function createChat(options: ChatOptions) {
         );
         if (wrote) set({ dataVersion: get().dataVersion + 1 });
       } catch (error) {
-        if (mine === generation) set({ error: explainError(error, config.provider) });
+        if (mine === generation) {
+          set({
+            error: explainError(error, config.provider),
+            errorDetail: errorDetail(error, config.provider, [key]),
+          });
+        }
       } finally {
         if (mine === generation) {
           controller = null;
@@ -191,7 +200,7 @@ function createChat(options: ChatOptions) {
         // Moving on without answering a change card counts as cancelling it.
         const open = pendingApprovals(get().messages);
         const answers = open.length ? [cancelledMessage(open)] : [];
-        set({ decisions: {}, error: null });
+        set({ decisions: {}, error: null, errorDetail: null });
         await append([...answers, { role: "user", content }]);
         await run(settings);
       },

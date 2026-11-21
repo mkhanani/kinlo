@@ -19,7 +19,7 @@ const SUGGESTIONS = {
 export function Conversation({ config }: { config: AiConfig }) {
   const settings = useSettings();
   const side = useSide();
-  const { messages, live, working, error, decisions, draft } = useChat();
+  const { messages, live, working, error, errorDetail, decisions, draft } = useChat();
   const setDraft = useChat((s) => s.setDraft);
   const focusRequests = useChat((s) => s.focusRequests);
   const send = useChat((s) => s.send);
@@ -93,6 +93,7 @@ export function Conversation({ config }: { config: AiConfig }) {
             {error && (
               <div role="alert" className="rounded-[12px] border border-hairline bg-control px-3 py-2.5 text-sm">
                 <p>{error}</p>
+                {errorDetail && <p className="mt-1.5 select-text break-words text-xs text-muted">{errorDetail}</p>}
                 <div className="mt-2 flex justify-end">
                   <Button size="sm" onClick={() => void retry(settings)}>
                     Try again

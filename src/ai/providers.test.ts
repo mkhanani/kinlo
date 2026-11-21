@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanBaseUrl, configFrom, explainError, HttpError, listModels } from "./providers";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { runTurn } from "./engine";
+import { cleanBaseUrl, configFrom, errorDetail, explainError, HttpError, listModels, redact } from "./providers";
 
 type Call = { url: string; headers: Record<string, string> };
 
@@ -85,6 +87,118 @@ describe("explaining what went wrong", () => {
   it("never repeats the error's own text, which could hold anything", () => {
     const message = explainError(Object.assign(new Error("secret sk-123 in body"), { statusCode: 400 }), "openai");
     expect(message).not.toContain("sk-123");
+  });
+});
+
+/** An error the way the AI SDK hands it over after it has tried twice. */
+function retried(inner: unknown) {
+  return Object.assign(new Error("Failed after 2 attempts. Last error: something"), {
+    name: "AI_RetryError",
+    reason: "maxRetriesExceeded",
+    lastError: inner,
+  });
+}
+
+/** An error the way the AI SDK reports a provider's refusal. */
+function apiError(statusCode: number, message: string) {
+  return Object.assign(new Error(message), { name: "AI_APICallError", statusCode });
+}
+
+describe("explaining a request that was tried twice", () => {
+  it("says what the provider said, not that there is no connection", () => {
+    expect(explainError(retried(apiError(429, "quota")), "google")).toBe(
+      "Google says you have hit a limit. Try again in a little while, or pick another model.",
+    );
+    expect(explainError(retried(apiError(503, "overloaded")), "google")).toBe(
+      "Google is having trouble right now. Try again in a little while.",
+    );
+    // A connection that really failed, twice, is still a connection problem.
+    expect(explainError(retried(new TypeError("fetch failed")), "google")).toBe(
+      "kinlo could not reach Google. Check your connection.",
+    );
+  });
+
+  it("tells an answer it could not read apart from no answer at all", () => {
+    const unreadable = Object.assign(new Error("Type validation failed"), { name: "AI_TypeValidationError" });
+    expect(explainError(unreadable, "google")).toBe("Google sent an answer kinlo could not read.");
+  });
+});
+
+describe("the provider's own words", () => {
+  it("are passed on, shortened, under the provider's name", () => {
+    const quota = "You exceeded your current quota.\n  Quota exceeded for metric: free_tier_requests, limit: 0, model: gemini-4-argon";
+    expect(errorDetail(retried(apiError(429, quota)), "google")).toBe(
+      "Google said: You exceeded your current quota. Quota exceeded for metric: free_tier_requests, limit: 0, model: gemini-4-argon",
+    );
+    const long = errorDetail(apiError(400, "x".repeat(900)), "openai")!;
+    expect(long.length).toBeLessThanOrEqual("OpenAI said: ".length + 280);
+    expect(long.endsWith("…")).toBe(true);
+  });
+
+  it("are labelled differently when nobody answered", () => {
+    expect(errorDetail(new TypeError("error sending request"), "google")).toBe("Details: error sending request");
+    expect(errorDetail("connection closed", "anthropic")).toBe("Details: connection closed");
+    expect(errorDetail(null, "google")).toBeNull();
+    expect(errorDetail(new Error("   "), "google")).toBeNull();
+  });
+
+  it("never show a key, the saved one or anything shaped like one", () => {
+    const saved = "my-own-unusual-key-123456";
+    const detail = errorDetail(
+      apiError(
+        401,
+        `Incorrect API key provided: ${saved}. Also sk-proj-abcdef123456, AIzaSyA1234567890abcdef, Bearer eyJhbGciOi.abc and https://x.example/v1?key=zzzz9999&alt=sse`,
+      ),
+      "openai",
+      [saved],
+    )!;
+    for (const secret of [saved, "sk-proj-abcdef123456", "AIzaSyA1234567890abcdef", "eyJhbGciOi.abc", "zzzz9999"]) {
+      expect(detail).not.toContain(secret);
+    }
+    expect(detail).toContain("Incorrect API key provided");
+    expect(redact("nothing secret here")).toBe("nothing secret here");
+  });
+});
+
+describe("a real provider adapter, with the network replaced", () => {
+  /** Runs one question through Google's adapter, answering every request the same way. */
+  async function ask(status: number, message: string) {
+    let calls = 0;
+    const google = createGoogleGenerativeAI({
+      apiKey: "AIzaSyTESTKEY1234567890",
+      fetch: async () => {
+        calls++;
+        return new Response(JSON.stringify({ error: { code: status, message, status: "X" } }), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+    const failure = await runTurn({
+      model: google("gemini-test"),
+      instructions: "x",
+      messages: [{ role: "user", content: "Whose birthday is next?" }],
+      tools: {},
+    }).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    return { calls, failure };
+  }
+
+  it("reports a spent quota as a limit, with Google's reason", async () => {
+    const { calls, failure } = await ask(429, "Quota exceeded for metric: free_tier_requests, limit: 0");
+    expect(calls).toBe(2); // tried again once, as intended
+    expect(explainError(failure, "google")).toContain("hit a limit");
+    expect(errorDetail(failure, "google", ["AIzaSyTESTKEY1234567890"])).toBe(
+      "Google said: Quota exceeded for metric: free_tier_requests, limit: 0",
+    );
+  });
+
+  it("reports an overloaded model as trouble on Google's side", async () => {
+    const { failure } = await ask(503, "The model is overloaded. Please try again later.");
+    expect(explainError(failure, "google")).toBe("Google is having trouble right now. Try again in a little while.");
+    expect(errorDetail(failure, "google")).toBe("Google said: The model is overloaded. Please try again later.");
   });
 });
 
