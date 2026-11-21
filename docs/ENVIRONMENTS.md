@@ -13,7 +13,7 @@ feature branch ──PR──▶ staging ──PR──▶ main ──tag v*─�
 
 | | Testing | Staging | Production |
 |---|---|---|---|
-| Trigger | every pull request, and each merge to `main` | push to `staging` | tag `v*` on `main` |
+| Trigger | every pull request, and each merge to `main` | push to `staging` | "Run workflow" on `main`, or a tag `v*` on `main` |
 | Workflow | `.github/workflows/testing.yml` | `staging.yml` | `production.yml` |
 | What runs | type check, unit tests, frontend build, `cargo fmt`, `clippy`, Rust tests, compile check on Windows and macOS | all of Testing, then installers for every platform | all of Testing, tag checks, then installers for every platform |
 | Output | pass or fail | installers attached to the workflow run | a **draft** GitHub Release |
@@ -21,7 +21,7 @@ feature branch ──PR──▶ staging ──PR──▶ main ──tag v*─�
 
 Staging and Production both run the full Testing suite first. A build never starts if a check fails.
 
-Production has two extra guards: the tag must equal the app version (`v0.1.0` for version `0.1.0`), and the tagged commit must already be on `main`. A tag pushed from any other branch fails before anything is built.
+Production has extra guards: the version must equal the app version (`v0.1.0` for version `0.1.0`), the commit must already be on `main`, and a version that has been published cannot be released again. A release started from any other branch fails before anything is built.
 
 ## Running on Windows, macOS and Linux
 
@@ -66,13 +66,17 @@ npm run check              # everything the Testing stage runs, locally
 1. Branch from `staging`, open a pull request back into `staging`. Testing must be green.
 2. Merge. The Staging workflow builds installers. Download them from the run's Artifacts and try the change with real use.
 3. When staging is good, open a pull request from `staging` into `main` and merge.
-4. Bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml` (Testing fails if they disagree), then tag:
+4. Bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml` (Testing fails if they disagree), and get that onto `main` the same way.
+5. Start the release, either way:
+   - **From GitHub:** Actions → Production → Run workflow, on `main`, and type the version, for example `v0.1.0`.
+   - **From a terminal:**
 
-```bash
-git tag v0.1.0 && git push origin v0.1.0
-```
+     ```bash
+     git tag v0.1.0 origin/main && git push origin v0.1.0
+     ```
 
-5. Review the draft release, then publish.
+   Both run the same checks and builds. Started from GitHub, no tag exists until the draft is published; GitHub creates it then.
+6. Review the draft release, then publish.
 
 ## Repository setup
 

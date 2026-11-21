@@ -1,35 +1,69 @@
 # Stage 3 of 3: Production.
-# A tag `v*` on `main` is checked, tested, built for every platform and attached to a DRAFT release.
+# A release is checked, tested, built for every platform and attached to a DRAFT release.
 # Nothing is public until a person reviews the draft and presses Publish.
+#
+# There are two ways to start one, and they do the same thing:
+#   - push a tag `v*` that is on `main`, or
+#   - in the Actions tab, open this workflow, press "Run workflow" on `main` and type the
+#     version (for example v0.1.0). No tag is needed first: GitHub creates it from that
+#     commit when the draft is published.
 name: Production
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, with the v (for example v0.1.0). Must match the app's version."
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: production-${{ github.ref }}
+  group: production-${{ inputs.version || github.ref_name }}
   cancel-in-progress: false
+
+env:
+  # The version being released, whichever way the run was started. Only ever used
+  # through this variable, never pasted into a script.
+  RELEASE_TAG: ${{ inputs.version || github.ref_name }}
 
 jobs:
   verify:
-    name: Tag is releasable
+    name: Release is allowed
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Tag matches the app version
-        run: node scripts/check-version.mjs "${{ github.ref_name }}"
-      - name: Tagged commit is on main
+      - name: Version looks like v1.2.3
+        run: |
+          if ! printf '%s' "$RELEASE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::\"$RELEASE_TAG\" is not a version like v0.1.0."
+            exit 1
+          fi
+      - name: Version matches the app
+        run: node scripts/check-version.mjs "$RELEASE_TAG"
+      - name: Commit is on main
         run: |
           git fetch origin main
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::$GITHUB_REF_NAME is not on main. Production releases are cut from main only."
+            echo "::error::This commit is not on main. Production releases are cut from main only."
+            exit 1
+          fi
+      - name: This version has not been published already
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # A draft for this version may exist from an earlier try and is reused.
+          # A published one is final: bump the version instead.
+          published=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.draft == false' 2>/dev/null || echo "false")
+          if [ "$published" = "true" ]; then
+            echo "::error::$RELEASE_TAG has already been published. Bump the version and release that."
             exit 1
           fi
 
@@ -75,8 +109,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: kinlo ${{ github.ref_name }}
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: kinlo ${{ env.RELEASE_TAG }}
+          # Used when the tag does not exist yet (a run started from the Actions tab):
+          # publishing the draft creates the tag from this commit.
+          releaseCommitish: ${{ github.sha }}
           releaseBody: |
             Download the file for your computer from the assets below.
 
