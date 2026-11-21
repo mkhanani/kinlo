@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { ArrowUp, Check, Copy, Search, Square } from "lucide-react";
 import { useChat } from "@/ai/chat";
 import { describeLookup } from "@/ai/describe";
 import { toView } from "@/ai/engine";
 import { PROVIDERS, type AiConfig } from "@/ai/providers";
-import { settingsKey, useSettings, useSide } from "@/app/settings";
+import { useSettings, useSide } from "@/app/settings";
 import { Button } from "@/components/ui/Button";
 import { ActionCardView } from "./ActionCardView";
 import { Markdown } from "./Markdown";
+import { useRefreshOnChange } from "./useRefreshOnChange";
 
 const SUGGESTIONS = {
   personal: ["Who should I catch up with?", "What is coming up this week?", "Whose birthday is next?"],
@@ -19,8 +19,9 @@ const SUGGESTIONS = {
 export function Conversation({ config }: { config: AiConfig }) {
   const settings = useSettings();
   const side = useSide();
-  const client = useQueryClient();
-  const { messages, live, working, error, decisions, dataVersion } = useChat();
+  const { messages, live, working, error, decisions, draft } = useChat();
+  const setDraft = useChat((s) => s.setDraft);
+  const focusRequests = useChat((s) => s.focusRequests);
   const send = useChat((s) => s.send);
   const decide = useChat((s) => s.decide);
   const retry = useChat((s) => s.retry);
@@ -29,13 +30,7 @@ export function Conversation({ config }: { config: AiConfig }) {
   const view = useMemo(() => toView(messages), [messages]);
   const empty = view.length === 0 && live.length === 0;
 
-  // When the assistant has changed something, every screen that shows it must catch up.
-  const seen = useRef(dataVersion);
-  useEffect(() => {
-    if (dataVersion === seen.current) return;
-    seen.current = dataVersion;
-    void client.invalidateQueries({ predicate: (query) => query.queryKey[0] !== settingsKey[0] });
-  }, [dataVersion, client]);
+  useRefreshOnChange(useChat);
 
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -77,7 +72,7 @@ export function Conversation({ config }: { config: AiConfig }) {
                   side={side}
                   currency={settings.defaultCurrency}
                   disabled={working}
-                  onDecide={(approved) => void decide(item.approvalId, approved, settings)}
+                  onDecide={(approved) => void decide({ [item.approvalId]: approved }, settings)}
                 />
               );
             })}
@@ -110,7 +105,7 @@ export function Conversation({ config }: { config: AiConfig }) {
         <div ref={end} />
       </div>
 
-      <Composer working={working} onSend={(text) => void send(text, settings)} onStop={stop} />
+      <Composer text={draft} setText={setDraft} focusRequests={focusRequests} working={working} onSend={(text) => void send(text, settings)} onStop={stop} />
       <p className="truncate px-4 pb-3 text-center text-xs text-subtle">
         {info.local ? `${config.model} · runs on this computer` : `${info.label} · ${config.model}`}
       </p>
@@ -161,8 +156,21 @@ function Lookup({ toolName, input }: { toolName: string; input: unknown }) {
   );
 }
 
-function Composer({ working, onSend, onStop }: { working: boolean; onSend: (text: string) => void; onStop: () => void }) {
-  const [text, setText] = useState("");
+function Composer({
+  text,
+  setText,
+  focusRequests,
+  working,
+  onSend,
+  onStop,
+}: {
+  text: string;
+  setText: (text: string) => void;
+  focusRequests: number;
+  working: boolean;
+  onSend: (text: string) => void;
+  onStop: () => void;
+}) {
   const box = useRef<HTMLTextAreaElement>(null);
 
   // Grow with what is typed, up to a few lines.
@@ -172,12 +180,20 @@ function Composer({ working, onSend, onStop }: { working: boolean; onSend: (text
     element.style.height = "auto";
     element.style.height = `${Math.min(element.scrollHeight, 132)}px`;
   }, [text]);
-  useEffect(() => box.current?.focus(), []);
+  // Take the cursor when the box appears and whenever it is asked to, and put it at the
+  // end. That matters when the box arrives with a start already written, such as
+  // "Draft a short message to Ana".
+  useEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    element.focus();
+    element.setSelectionRange(element.value.length, element.value.length);
+  }, [focusRequests]);
 
   const submit = () => {
     if (working || !text.trim()) return;
-    onSend(text);
     setText("");
+    onSend(text);
   };
 
   return (

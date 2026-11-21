@@ -7,10 +7,17 @@ export function Menu({
   trigger,
   children,
   align = "end",
+  afterClose,
 }: {
   trigger: ReactNode;
   children: ReactNode;
   align?: "start" | "end";
+  /**
+   * For menus whose items move the cursor somewhere else on purpose. When set, the
+   * cursor is not put back on the trigger as the menu closes; this is called instead,
+   * once the menu has let go of it.
+   */
+  afterClose?: () => void;
 }) {
   return (
     <Dropdown.Root>
@@ -19,6 +26,14 @@ export function Menu({
         <Dropdown.Content
           align={align}
           sideOffset={6}
+          onCloseAutoFocus={
+            afterClose
+              ? (event) => {
+                  event.preventDefault();
+                  afterClose();
+                }
+              : undefined
+          }
           className="menu-surface glass-float z-50 max-h-[320px] min-w-[180px] overflow-y-auto p-1"
         >
           {children}
