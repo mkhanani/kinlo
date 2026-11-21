@@ -5,7 +5,7 @@ description = "Local-first personal CRM for desktop"
 authors = ["kinlo contributors"]
 license = "MIT"
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.90"
 
 [lib]
 name = "kinlo_lib"
@@ -25,6 +25,10 @@ tauri-plugin-sql = { version = "2.6.0", features = ["sqlite"] }
 tauri-plugin-notification = "2.8.1"
 tauri-plugin-autostart = "2.7.0"
 tauri-plugin-single-instance = "2.5.5"
+# Lets the web view call the AI provider the user chose, without the browser's cross-origin limits.
+tauri-plugin-http = "2.9.0"
+# API keys go in the operating system's keychain. Nowhere else.
+keyring = "4.2.0"
 
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
 window-vibrancy = "0.8.1"

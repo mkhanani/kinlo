@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { getKey } from "@/ai/keys";
 import { loadSettings } from "@/data";
+import { db } from "@/data/driver";
 import { useTestDatabase } from "@/data/testing";
 import { renderApp } from "@/test/render";
 
@@ -8,22 +10,38 @@ useTestDatabase();
 
 const enter = () => fireEvent.keyDown(window, { key: "Enter" });
 
-/** Walks the first three screens with the keyboard, as far as the split screen. */
+/**
+ * Waits for a question to be on screen and ready for the keyboard. A screen listens for
+ * keys from an effect, which React runs a moment after the heading appears; a key
+ * pressed in that gap would be lost, which no person is fast enough to do.
+ */
+async function question(name: string) {
+  const heading = await screen.findByRole("heading", { name });
+  await act(async () => {});
+  return heading;
+}
+
+/** Walks the first screens with the keyboard, as far as the split screen. */
 async function reachSides(name = "Mustafa") {
   renderApp("/", { onboarded: false });
-  await screen.findByRole("heading", { name: "Remember your people." });
+  await question("Remember your people.");
   fireEvent.click(screen.getByRole("button", { name: "Get started" }));
 
   const input = await screen.findByLabelText("Your name");
   fireEvent.change(input, { target: { value: name } });
   fireEvent.keyDown(input, { key: "Enter" });
 
-  await screen.findByRole("heading", { name: "How should kinlo look?" });
+  await question("How should kinlo look?");
   fireEvent.keyDown(window, { key: "c" });
   await waitFor(() => expect(screen.getByRole("radio", { name: /Dark/ })).toBeChecked());
   enter();
 
-  await screen.findByRole("heading", { name: "What will you use kinlo for?" });
+  // The assistant is optional: Enter skips it.
+  await question("Would you like an assistant?");
+  expect(screen.getByRole("button", { name: /Skip/ })).toBeInTheDocument();
+  enter();
+
+  await question("What will you use kinlo for?");
 }
 
 describe("Welcome setup", () => {
@@ -68,6 +86,30 @@ describe("Welcome setup", () => {
     expect(both).toBeChecked();
     expect(await screen.findByRole("radiogroup", { name: "Side" }, { timeout: 3000 })).toBeInTheDocument();
     await waitFor(async () => expect(await loadSettings()).toMatchObject({ onboarded: true, sides: "both" }));
+  });
+
+  it("can connect a model on the way, with the key going to the keychain and not the database", async () => {
+    renderApp("/", { onboarded: false });
+    fireEvent.click(await screen.findByRole("button", { name: "Get started" }));
+    fireEvent.keyDown(await screen.findByLabelText("Your name"), { key: "Enter" });
+    await question("How should kinlo look?");
+    enter();
+
+    await question("Would you like an assistant?");
+    fireEvent.keyDown(window, { key: "a" });
+    await waitFor(() => expect(screen.getByRole("radio", { name: /Anthropic/ })).toBeChecked());
+    const key = screen.getByLabelText("API key");
+    fireEvent.change(key, { target: { value: "sk-ant-onboarding" } });
+    // Typing a letter in the key box does not change the answer.
+    fireEvent.keyDown(key, { key: "e" });
+    expect(screen.getByRole("radio", { name: /Anthropic/ })).toBeChecked();
+    fireEvent.keyDown(key, { key: "Enter" });
+
+    await question("What will you use kinlo for?");
+    await waitFor(async () => expect(await getKey("anthropic")).toBe("sk-ant-onboarding"));
+    expect(await loadSettings()).toMatchObject({ aiProvider: "anthropic", aiModel: null });
+    const stored = await db().select<{ value: string }>("SELECT value FROM settings");
+    expect(JSON.stringify(stored)).not.toContain("sk-ant-onboarding");
   });
 
   it("the name can be skipped, and you can go back", async () => {
