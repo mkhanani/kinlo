@@ -1,6 +1,10 @@
 # Phone notifications: the plan
 
-Status: not built. This is the plan to choose from.
+Status: not built.
+
+**Decided:** option A, sending reminders to your own calendar, with **Google Calendar** built and tested first. It is planned as step 10, right after v0.1.0 ships.
+
+The options that were weighed are kept below for the record.
 
 ## The constraint
 
@@ -52,8 +56,13 @@ If phone notifications are wanted sooner, **B** can be added first as a small op
 
 Leave **C** for a later major version, and skip **D**.
 
-## What to decide
+## What step 10 will involve
 
-1. A, B, or both.
-2. Whether it goes in before v0.1.0 or right after.
-3. For A: which calendar you use yourself, so that one is built and tested first.
+- **Signing in to Google.** kinlo opens Google's own sign-in page in your browser. It asks for access to one thing only: a calendar named "kinlo" that it creates for itself. It cannot read your other calendars or events.
+- **Where the sign-in is kept.** In the operating system's keychain, next to the AI keys. Never in the database.
+- **What gets written.** Each open reminder becomes an event at its due time with an alert, in the "kinlo" calendar. Editing, snoozing, finishing or deleting the reminder updates or removes the event. Repeating reminders become repeating events.
+- **When it syncs.** Whenever a reminder changes while kinlo is open, and once at launch to catch up.
+- **Turning it off.** One switch in Settings disconnects and can remove the "kinlo" calendar.
+- **One thing needed from you.** Google only allows this through an app registration in Google Cloud, which is free and takes about ten minutes. It has to belong to the project's owner. The steps are in `GOOGLE_CLOUD_SETUP.md`. Google classifies the one permission kinlo asks for as non-sensitive, so it does not review that permission before a public release.
+
+Other calendars (iCloud, Fastmail, Nextcloud) use a common standard and can follow once Google works.

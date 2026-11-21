@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { X } from "lucide-react";
 import { useContact, useContacts } from "@/data/hooks";
@@ -23,14 +23,27 @@ export function PersonPicker({ id, value, onChange, side, placeholder = "Nobody 
   const [active, setActive] = useState(0);
   const search = useDebounced(query, 120);
   const { data: chosen } = useContact(value ?? undefined);
-  const { data: matches = [] } = useContacts({ side, search: search.trim() || undefined });
+  const { data: matches = [], isPlaceholderData } = useContacts({ side, search: search.trim() || undefined });
   const options = matches.slice(0, 6);
+  // The list lags a moment behind typing. While it does, it shows matches for what was
+  // typed before, and choosing from it would pick the wrong person.
+  const catchingUp = query.trim() !== search.trim() || isPlaceholderData;
+  const enterWaiting = useRef(false);
 
   const pick = (contactId: string) => {
+    enterWaiting.current = false;
     onChange(contactId);
     setQuery("");
     setOpen(false);
   };
+
+  // Enter pressed while the list was catching up: choose the top match once it has.
+  useEffect(() => {
+    if (catchingUp || !enterWaiting.current) return;
+    enterWaiting.current = false;
+    if (options[0]) pick(options[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catchingUp, matches]);
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {
@@ -40,6 +53,11 @@ export function PersonPicker({ id, value, onChange, side, placeholder = "Nobody 
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActive((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter" && open && catchingUp) {
+      // Too early to choose. Hold the Enter (and keep it from submitting the form) until
+      // the list shows matches for what is typed now.
+      e.preventDefault();
+      enterWaiting.current = true;
     } else if (e.key === "Enter" && open && options[active]) {
       // Choosing a person must not also submit the form around it.
       e.preventDefault();

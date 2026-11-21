@@ -38,6 +38,14 @@ interface UIState {
   openReminderForm: (options?: { reminderId?: string; contactId?: string }) => void;
   closeReminderForm: () => void;
 
+  /**
+   * The add/edit deal dialog. `dealId` null means a new one, which can start already
+   * attached to a person and in a particular stage.
+   */
+  dealForm: { open: boolean; dealId: string | null; contactId: string | null; stageId: string | null };
+  openDealForm: (options?: { dealId?: string; contactId?: string; stageId?: string }) => void;
+  closeDealForm: () => void;
+
   /** Kept here so the People list is as you left it when you come back from a person. */
   peopleFilter: PeopleFilter;
   setPeopleFilter: (patch: Partial<PeopleFilter>) => void;
@@ -60,6 +68,19 @@ export const useUI = create<UIState>((set, get) => ({
       paletteOpen: false,
     }),
   closeReminderForm: () => set({ reminderForm: { ...get().reminderForm, open: false } }),
+
+  dealForm: { open: false, dealId: null, contactId: null, stageId: null },
+  openDealForm: (options = {}) =>
+    set({
+      dealForm: {
+        open: true,
+        dealId: options.dealId ?? null,
+        contactId: options.contactId ?? null,
+        stageId: options.stageId ?? null,
+      },
+      paletteOpen: false,
+    }),
+  closeDealForm: () => set({ dealForm: { ...get().dealForm, open: false } }),
 
   peopleFilter: EMPTY_PEOPLE_FILTER,
   setPeopleFilter: (patch) => set({ peopleFilter: { ...get().peopleFilter, ...patch } }),

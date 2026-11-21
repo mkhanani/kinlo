@@ -44,6 +44,7 @@ import { formatBirthday, formatDate, relativeDay } from "@/lib/dates";
 import { openExternal } from "@/lib/external";
 import { useUI } from "@/store/ui";
 import { keepInTouchLabel, sideLabels } from "./labels";
+import { formatMoney } from "@/features/pipeline/board";
 import { ReminderRow } from "@/features/reminders/ReminderRow";
 import { Timeline } from "./Timeline";
 
@@ -357,17 +358,38 @@ function Deals({ contactId }: { contactId: string }) {
   const { data: deals = [] } = useContactDeals(contactId);
   const { data: stages = [] } = useStages();
   // Deals are a business thing. Nothing to show for someone who only uses the personal side.
+  const openForm = useUI((s) => s.openDealForm);
   if (sides === "personal") return null;
   return (
-    <Card title="Deals" icon={Columns3}>
+    <Card
+      title="Deals"
+      icon={Columns3}
+      action={
+        <button
+          aria-label="Add deal"
+          onClick={() => openForm({ contactId })}
+          className="-my-1 flex h-6 w-6 items-center justify-center rounded-[8px] text-muted hover:bg-control hover:text-fg"
+        >
+          <Plus size={14} strokeWidth={1.5} />
+        </button>
+      }
+    >
       {deals.length === 0 ? (
         <p className="text-base text-subtle">No deals.</p>
       ) : (
-        <ul className="flex flex-col gap-2 text-base">
+        <ul className="-mx-2 flex flex-col">
           {deals.map((d) => (
-            <li key={d.id} className="flex justify-between gap-3">
-              <span className="min-w-0 truncate">{d.title}</span>
-              <span className="shrink-0 text-muted">{stages.find((s) => s.id === d.stage_id)?.name}</span>
+            <li key={d.id}>
+              <button
+                onClick={() => openForm({ dealId: d.id })}
+                className="flex w-full items-center justify-between gap-3 rounded-[10px] px-2 py-1.5 text-left text-base transition-colors duration-150 hover:bg-control"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate">{d.title}</span>
+                  {d.value != null && <span className="block text-sm text-muted">{formatMoney(d.value, d.currency, true)}</span>}
+                </span>
+                <span className="shrink-0 text-sm text-muted">{stages.find((s) => s.id === d.stage_id)?.name}</span>
+              </button>
             </li>
           ))}
         </ul>

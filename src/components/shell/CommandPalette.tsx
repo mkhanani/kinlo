@@ -1,9 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeftRight, Bell, BellPlus, Columns3, House, Search, Settings, UserPlus, Users } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Bell,
+  BellPlus,
+  CirclePlus,
+  Columns3,
+  House,
+  Search,
+  Settings,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useSaveSetting, useSettings, useSide } from "@/app/settings";
 import { Avatar } from "@/components/ui/Avatar";
@@ -76,11 +87,16 @@ function PaletteBody({ close }: { close: () => void }) {
   const navigate = useNavigate();
   const openContactForm = useUI((s) => s.openContactForm);
   const openReminderForm = useUI((s) => s.openReminderForm);
+  const openDealForm = useUI((s) => s.openDealForm);
   const { sides } = useSettings();
   const side = useSide();
   const save = useSaveSetting();
   const search = useDebounced(query, 100);
-  const { data: hits = [] } = useContactSearch(search, side);
+  const { data: hits = [], isPlaceholderData } = useContactSearch(search, side);
+  // Results lag a moment behind typing. Until they catch up, the people listed are
+  // matches for what was typed before, and Enter must not open one of them.
+  const catchingUp = query.trim() !== search.trim() || (search.trim() !== "" && isPlaceholderData);
+  const enterWaiting = useRef(false);
 
   const items = useMemo<Item[]>(() => {
     const go = (to: string) => () => {
@@ -99,6 +115,9 @@ function PaletteBody({ close }: { close: () => void }) {
     const actions: Item[] = [
       { id: "add-person", group: "Actions", label: "Add person", icon: icon(UserPlus), run: () => openContactForm() },
       { id: "add-reminder", group: "Actions", label: "Add reminder", icon: icon(BellPlus), run: () => openReminderForm() },
+      ...(side === "business"
+        ? [{ id: "add-deal", group: "Actions" as const, label: "Add deal", icon: icon(CirclePlus), run: () => openDealForm() }]
+        : []),
       ...(sides === "both"
         ? [
             {
@@ -131,7 +150,7 @@ function PaletteBody({ close }: { close: () => void }) {
     }));
     const matches = (item: Item) => item.label.toLowerCase().includes(q);
     return [...people, ...pages.filter(matches), ...actions.filter(matches)];
-  }, [query, search, hits, side, sides, save, navigate, close, openContactForm, openReminderForm]);
+  }, [query, search, hits, side, sides, save, navigate, close, openContactForm, openReminderForm, openDealForm]);
 
   useEffect(() => setActive(0), [query, items.length]);
 
@@ -144,9 +163,17 @@ function PaletteBody({ close }: { close: () => void }) {
       setActive((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      items[active]?.run();
+      if (catchingUp) enterWaiting.current = true;
+      else items[active]?.run();
     }
   };
+
+  // Enter pressed while results were catching up: act on the top result once they have.
+  useEffect(() => {
+    if (catchingUp || !enterWaiting.current) return;
+    enterWaiting.current = false;
+    items[0]?.run();
+  }, [catchingUp, items]);
 
   return (
     <div onKeyDown={onKeyDown}>

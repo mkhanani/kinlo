@@ -24,7 +24,9 @@ async function start() {
 
   if (import.meta.env.DEV) {
     // Handy in the dev console: `await kinlo.createContact({ name: "Ana" })`.
-    Object.assign(window, { kinlo: await import("@/data"), kinloQueries: queryClient });
+    // `kinloDb()` runs raw SQL, for setting up states the app itself cannot create.
+    const { db } = await import("@/data/driver");
+    Object.assign(window, { kinlo: await import("@/data"), kinloQueries: queryClient, kinloDb: db });
   }
 
   root.render(

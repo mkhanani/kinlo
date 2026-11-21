@@ -113,6 +113,37 @@ export async function moveDeal(id: string, stageId: string, position: number): P
   ]);
 }
 
+/** Moves a deal to the bottom of another stage, for when there is no drop position. */
+export async function moveDealToStage(id: string, stageId: string): Promise<void> {
+  await db().execute(
+    `UPDATE deals
+        SET stage_id = $2,
+            position = (SELECT coalesce(max(position), 0) + 1 FROM deals WHERE stage_id = $2 AND id <> $1),
+            updated_at = $3
+      WHERE id = $1 AND stage_id <> $2`,
+    [id, stageId, nowIso()],
+  );
+}
+
+/**
+ * Renumbers a stage's deals 1, 2, 3... in their current order. Dropping a deal between
+ * two others halves the gap between their positions; after very many moves in one spot
+ * the gap would become too small to halve again, so the board calls this when it gets close.
+ */
+export async function renumberStage(stageId: string): Promise<void> {
+  // The new numbers are worked out from the order as it stands, in the FROM part, before
+  // any row is changed. Counting inside the UPDATE itself would read rows it had already
+  // renumbered and get the order wrong.
+  await db().execute(
+    `UPDATE deals
+        SET position = ranked.place
+       FROM (SELECT id, row_number() OVER (ORDER BY position, created_at, id) AS place
+               FROM deals WHERE stage_id = $1) AS ranked
+      WHERE deals.id = ranked.id`,
+    [stageId],
+  );
+}
+
 export async function deleteDeal(id: string): Promise<void> {
   await db().execute("DELETE FROM deals WHERE id = $1", [id]);
 }
