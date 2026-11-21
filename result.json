@@ -1,0 +1,15 @@
+{
+  "system": "win32",
+  "aliveAfterStart": true,
+  "aliveAtEnd": true,
+  "databaseCreated": true,
+  "migrationsApplied": 8,
+  "expectedMigrations": 8,
+  "keyboardWorks": true,
+  "onboarded": true,
+  "sides": "both",
+  "people": [
+    "Ada Lovelace"
+  ],
+  "droveTheApp": true
+}
