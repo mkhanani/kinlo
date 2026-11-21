@@ -85,13 +85,23 @@ It is optional and off until you set it up in **Settings → Assistant**. Bring 
 
 It can look things up by itself. It cannot change anything by itself: every addition or edit appears as a card, and nothing is saved until you confirm it.
 
+## Updating
+
+kinlo does not update itself yet. To get a new version:
+
+1. Download the file for your system from the [latest release](https://github.com/mkhanani/kinlo/releases/latest).
+2. Quit kinlo completely. Closing the window is not enough if "Keep running in the background" is on: use **Settings → Quit kinlo**, or the kinlo icon in the system tray.
+3. Run the installer (on macOS, drag the new kinlo over the old one in Applications). It replaces the old version.
+
+Your data is not touched: it lives in its own folder, not inside the app. The first-open warning for an unsigned app appears again for each new version.
+
 ## Backing up
 
 Close kinlo and copy the database file that **Settings → Your data** points to. Putting that file back restores everything. The JSON export is a readable copy of all your data; this version cannot import it again.
 
 ## Not in this version
 
-Sync between devices, a phone app, email or calendar integration, shared use by more than one person, automatic updates, and code signing. To update, download the new release and install it over the old one; your data is kept.
+Sync between devices, a phone app, email or calendar integration, shared use by more than one person, automatic updates, and code signing.
 
 ## Building from source
 

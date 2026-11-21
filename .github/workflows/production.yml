@@ -6,7 +6,8 @@
 #   - push a tag `v*` that is on `main`, or
 #   - in the Actions tab, open this workflow, press "Run workflow" on `main` and type the
 #     version (for example v0.1.0). No tag is needed first: GitHub creates it from that
-#     commit when the draft is published.
+#     commit when the draft is published. That new tag starts this workflow once more;
+#     the run sees the release is already published and stops without building.
 name: Production
 
 on:
@@ -36,6 +37,9 @@ jobs:
     name: Release is allowed
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      # "false" when there is nothing to do: see the second step.
+      proceed: ${{ steps.published.outputs.proceed }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -46,33 +50,48 @@ jobs:
             echo "::error::\"$RELEASE_TAG\" is not a version like v0.1.0."
             exit 1
           fi
+      - name: This version has not been published already
+        id: published
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # A draft for this version may exist from an earlier try and is reused.
+          published=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.draft == false' 2>/dev/null || echo "false")
+          if [ "$published" != "true" ]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            # Publishing a draft creates its tag, and a new tag starts this workflow. The
+            # release it belongs to is already built and public, so there is nothing to do.
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$RELEASE_TAG is already published. This run was started by its tag being created, so there is nothing to build."
+            exit 0
+          fi
+          # Started by hand for a version that is already out: a published release is final.
+          echo "::error::$RELEASE_TAG has already been published. Bump the version and release that."
+          exit 1
       - name: Version matches the app
+        if: steps.published.outputs.proceed == 'true'
         run: node scripts/check-version.mjs "$RELEASE_TAG"
       - name: Commit is on main
+        if: steps.published.outputs.proceed == 'true'
         run: |
           git fetch origin main
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
             echo "::error::This commit is not on main. Production releases are cut from main only."
             exit 1
           fi
-      - name: This version has not been published already
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # A draft for this version may exist from an earlier try and is reused.
-          # A published one is final: bump the version instead.
-          published=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.draft == false' 2>/dev/null || echo "false")
-          if [ "$published" = "true" ]; then
-            echo "::error::$RELEASE_TAG has already been published. Bump the version and release that."
-            exit 1
-          fi
 
   test:
+    needs: verify
+    if: needs.verify.outputs.proceed == 'true'
     uses: ./.github/workflows/testing.yml
 
   build:
     name: Build ${{ matrix.name }}
     needs: [verify, test]
+    if: needs.verify.outputs.proceed == 'true'
     permissions:
       contents: write
     strategy:
