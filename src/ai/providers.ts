@@ -191,7 +191,41 @@ export async function listModels(provider: AiProvider, key: string | null, baseU
   return [...new Set(models)].sort((a, b) => a.localeCompare(b));
 }
 
-/** A short, plain explanation of why a provider could not be reached. */
+/**
+ * The error that says what actually happened. The AI SDK tries a request again when the
+ * provider is busy or says "slow down", and when that fails too it wraps the provider's
+ * answer in an error of its own. Without unwrapping, a limit or an overloaded model would
+ * look like no connection at all.
+ */
+function rootError(error: unknown): unknown {
+  let current = error;
+  for (let depth = 0; depth < 5; depth++) {
+    if (!current || typeof current !== "object" || ownStatus(current) !== null) break;
+    const inner = (current as { lastError?: unknown }).lastError ?? (current as { cause?: unknown }).cause;
+    if (inner === undefined || inner === null) break;
+    current = inner;
+  }
+  return current;
+}
+
+function ownStatus(error: unknown): number | null {
+  if (!error || typeof error !== "object") return null;
+  const candidate = (error as { status?: unknown; statusCode?: unknown }).status ??
+    (error as { statusCode?: unknown }).statusCode;
+  return typeof candidate === "number" ? candidate : null;
+}
+
+function statusOf(error: unknown): number | null {
+  return ownStatus(rootError(error));
+}
+
+/** True when the provider answered, but with something the AI SDK could not make sense of. */
+function isUnreadableAnswer(error: unknown): boolean {
+  const name = (rootError(error) as { name?: unknown } | null)?.name;
+  return typeof name === "string" && name.startsWith("AI_") && name !== "AI_APICallError" && name !== "AI_RetryError";
+}
+
+/** A short, plain explanation of what went wrong. Never the error's own text. */
 export function explainError(error: unknown, provider: AiProvider): string {
   const info = PROVIDERS[provider];
   const status = statusOf(error);
@@ -199,16 +233,40 @@ export function explainError(error: unknown, provider: AiProvider): string {
     return info.needsKey ? `${info.label} did not accept that key.` : `${info.label} refused the request.`;
   }
   if (status === 404) return "That model or address was not found.";
-  if (status === 429) return `${info.label} says you have hit a limit. Try again in a little while.`;
+  if (status === 429) return `${info.label} says you have hit a limit. Try again in a little while, or pick another model.`;
   if (status !== null && status >= 500) return `${info.label} is having trouble right now. Try again in a little while.`;
   if (status !== null) return `${info.label} answered with an error (${status}).`;
+  if (isUnreadableAnswer(error)) return `${info.label} sent an answer kinlo could not read.`;
   if (info.local) return "kinlo could not reach Ollama. Check that it is running on this computer.";
   return `kinlo could not reach ${info.label}. Check your connection.`;
 }
 
-function statusOf(error: unknown): number | null {
-  if (!error || typeof error !== "object") return null;
-  const candidate = (error as { status?: unknown; statusCode?: unknown }).status ??
-    (error as { statusCode?: unknown }).statusCode;
-  return typeof candidate === "number" ? candidate : null;
+const DETAIL_LIMIT = 280;
+
+/** Takes out anything that looks like a key, and the given keys themselves. */
+export function redact(text: string, secrets: (string | null | undefined)[] = []): string {
+  let clean = text;
+  for (const secret of secrets) {
+    if (secret && secret.length >= 6) clean = clean.split(secret).join("***");
+  }
+  return clean
+    .replace(/\b(Bearer|Basic)\s+[^\s"',]+/gi, "$1 ***")
+    .replace(/\b((?:api[-_]?)?key|token|secret|password)=[^&\s"']+/gi, "$1=***")
+    .replace(/\b(sk|pk|rk)-[A-Za-z0-9_*.-]{6,}/g, "***")
+    .replace(/\bAIza[0-9A-Za-z_-]{10,}/g, "***");
+}
+
+/**
+ * What the provider itself said, to show under the plain explanation: it is often the only
+ * way to tell a spent quota from a model that a key cannot use. Keys are taken out first,
+ * and it is shown on screen only: never saved, never logged.
+ */
+export function errorDetail(error: unknown, provider: AiProvider, secrets: (string | null | undefined)[] = []): string | null {
+  const root = rootError(error);
+  const raw = typeof root === "string" ? root : root instanceof Error ? root.message : null;
+  if (!raw) return null;
+  const tidy = redact(raw, secrets).replace(/\s+/g, " ").trim();
+  if (!tidy) return null;
+  const short = tidy.length > DETAIL_LIMIT ? `${tidy.slice(0, DETAIL_LIMIT - 1).trimEnd()}…` : tidy;
+  return statusOf(error) !== null ? `${PROVIDERS[provider].label} said: ${short}` : `Details: ${short}`;
 }

@@ -23,7 +23,7 @@ export function QuickAdd({ text, close }: { text: string; close: () => void }) {
   const settings = useSettings();
   const side = useSide();
   const client = useQueryClient();
-  const { messages, live, working, error, decisions } = useQuickAdd();
+  const { messages, live, working, error, errorDetail, decisions } = useQuickAdd();
   const decide = useQuickAdd((s) => s.decide);
   const retry = useQuickAdd((s) => s.retry);
   useRefreshOnChange(useQuickAdd);
@@ -136,6 +136,7 @@ export function QuickAdd({ text, close }: { text: string; close: () => void }) {
         {error && (
           <div role="alert" className="rounded-[12px] border border-hairline bg-control px-3 py-2.5 text-sm">
             <p>{error}</p>
+            {errorDetail && <p className="mt-1.5 select-text break-words text-xs text-muted">{errorDetail}</p>}
             <div className="mt-2 flex justify-end">
               <Button size="sm" onClick={() => void retry(settings)}>
                 Try again

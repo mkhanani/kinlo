@@ -70,6 +70,12 @@ It cannot delete anything, and it cannot send messages; a drafted message is tex
 
 Model names are fetched from the provider once a key is saved. If that fails, a model name can be typed in.
 
+## When a request fails
+
+The panel says what happened in plain words: the key was refused, the model was not found, a limit was hit, the provider is having trouble, or there is no connection. Under that it shows what the provider itself said, shortened, because that is often the only way to tell a spent quota from a model the key cannot use.
+
+The SDK tries a busy or rate-limited request once more before giving up, and wraps the provider's answer when it does. `explainError` and `errorDetail` in `src/ai/providers.ts` unwrap that, so a limit is not mistaken for a lost connection. The provider's words are passed through `redact`, which removes the saved key and anything shaped like one. They are shown on screen only: never saved and never logged.
+
 In the app, requests go through Tauri's HTTP plugin (`src/ai/http.ts`), because providers do not accept calls made directly from a web page. The plugin is allowed to reach any `http` or `https` address, which is what a custom address needs; kinlo's own code only ever calls the provider that is configured.
 
 ## For development

@@ -191,6 +191,27 @@ describe("Assistant panel", () => {
     expect(panel().queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("says why when the provider answers with a limit, instead of blaming the connection", async () => {
+    // What the AI SDK throws after Google has said "quota exceeded" twice.
+    setModelFactory(async () => {
+      throw Object.assign(new Error("Failed after 2 attempts."), {
+        name: "AI_RetryError",
+        lastError: Object.assign(new Error("Quota exceeded for metric: free_tier_requests, limit: 0, model: gemini-test"), {
+          name: "AI_APICallError",
+          statusCode: 429,
+        }),
+      });
+    });
+    renderApp("/", { aiProvider: "ollama", aiModel: "test-model" });
+    await openPanel();
+    await say("Whose birthday is next?");
+
+    const alert = await panel().findByRole("alert");
+    expect(alert).toHaveTextContent("Ollama says you have hit a limit.");
+    expect(alert).toHaveTextContent("Ollama said: Quota exceeded for metric: free_tier_requests, limit: 0, model: gemini-test");
+    expect(alert).not.toHaveTextContent("could not reach");
+  });
+
   it("keeps the conversation, and can start a new one", async () => {
     await openAssistant([[{ say: "Hello there." }]]);
     await say("Hi");
