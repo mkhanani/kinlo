@@ -25,6 +25,7 @@
   --ring: rgb(255 255 255 / 0.35);
   --shadow: 0 12px 40px -12px rgb(0 0 0 / 0.55);
   --float: rgb(24 24 27 / 0.86);
+  --float-solid: #1b1b1e;
 
   /* Window backdrop when the OS gives us no native blur (Linux, browser). */
   --backdrop: radial-gradient(1200px 700px at 15% -10%, #18181b 0%, transparent 60%),
@@ -51,6 +52,7 @@
   --ring: rgb(0 0 0 / 0.3);
   --shadow: 0 12px 40px -16px rgb(0 0 0 / 0.18);
   --float: rgb(255 255 255 / 0.85);
+  --float-solid: #fbfbfb;
 
   --backdrop: radial-gradient(1200px 700px at 15% -10%, #ffffff 0%, transparent 60%),
     radial-gradient(900px 600px at 110% 110%, #ececeb 0%, transparent 55%), #f6f6f5;
@@ -210,4 +212,37 @@
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
+}
+
+/* Menus fade and scale in from their trigger. */
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.menu-surface {
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+  animation: menu-in 180ms var(--ease-out);
+}
+
+/* Native select arrow, drawn so it follows the theme. */
+select {
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-size:
+    4px 4px,
+    4px 4px;
+  background-repeat: no-repeat;
+}
+select option {
+  background: var(--bg);
+  color: var(--fg);
 }

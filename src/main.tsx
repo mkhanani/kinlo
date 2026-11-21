@@ -22,6 +22,11 @@ async function start() {
   await openDatabase();
   queryClient.setQueryData(settingsKey, await loadSettings());
 
+  if (import.meta.env.DEV) {
+    // Handy in the dev console: `await kinlo.createContact({ name: "Ana" })`.
+    Object.assign(window, { kinlo: await import("@/data"), kinloQueries: queryClient });
+  }
+
   root.render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>

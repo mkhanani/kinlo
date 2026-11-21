@@ -14,6 +14,7 @@ import {
   listOverdueContacts,
   listReminders,
   listTags,
+  overdueDays,
   searchContacts,
   setContactTags,
   updateContact,
@@ -211,6 +212,10 @@ describe("overdue for contact", () => {
       ["Monthly", 60],
       ["Weekly", 3],
     ]);
+    // The in-memory calculation agrees with the SQL one for everybody.
+    for (const c of await listContacts({}, NOW)) {
+      expect(overdueDays(c, NOW)).toBe(overdue.find((o) => o.id === c.id)?.days_overdue ?? 0);
+    }
     expect((await listContacts({ overdueOnly: true }, NOW)).map((c) => c.name)).toEqual(["Monthly", "Weekly"]);
   });
 

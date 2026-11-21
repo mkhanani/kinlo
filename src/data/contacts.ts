@@ -23,6 +23,20 @@ const SELECT = `
 const daysOverdue = (now: string) =>
   `(CAST(julianday(${now}) - julianday(coalesce(c.last_contacted_at, c.created_at)) AS INTEGER) - c.keep_in_touch_days)`;
 
+/**
+ * The same calculation as the SQL above, for a contact already in memory.
+ * Returns 0 when the person is not overdue or has no keep-in-touch interval.
+ */
+export function overdueDays(
+  contact: Pick<Contact, "keep_in_touch_days" | "last_contacted_at" | "created_at" | "archived">,
+  now: string = nowIso(),
+): number {
+  if (contact.keep_in_touch_days == null || contact.archived) return 0;
+  const since = new Date(contact.last_contacted_at ?? contact.created_at).getTime();
+  const elapsed = Math.trunc((new Date(now).getTime() - since) / 86_400_000);
+  return Math.max(0, elapsed - contact.keep_in_touch_days);
+}
+
 function toContact(row: ContactRow): Contact {
   const { tags_json, days_overdue: _days, ...rest } = row;
   return {

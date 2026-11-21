@@ -1,31 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { MotionConfig } from "motion/react";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { AppShell } from "./AppShell";
-import { createQueryClient } from "./queryClient";
-import { settingsKey } from "./settings";
-import { DEFAULT_SETTINGS, type Settings } from "@/data";
+import { fireEvent, screen } from "@testing-library/react";
 import { useTestDatabase } from "@/data/testing";
 import { useUI } from "@/store/ui";
+import { renderApp as renderShell } from "@/test/render";
 
 useTestDatabase();
-
-function renderShell(path = "/", settings: Partial<Settings> = {}) {
-  const client = createQueryClient();
-  // The real app loads settings before its first render. Do the same here.
-  client.setQueryData(settingsKey, { ...DEFAULT_SETTINGS, ...settings });
-  return render(
-    <QueryClientProvider client={client}>
-      <MotionConfig reducedMotion="always">
-        <MemoryRouter initialEntries={[path]}>
-          <AppShell />
-        </MemoryRouter>
-      </MotionConfig>
-    </QueryClientProvider>,
-  );
-}
 
 describe("app shell", () => {
   it("shows the main navigation", () => {

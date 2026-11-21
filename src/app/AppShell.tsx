@@ -5,7 +5,8 @@ import { Sidebar } from "@/components/shell/Sidebar";
 import { AssistantPanel } from "@/components/shell/AssistantPanel";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { HomePage } from "@/pages/Home";
-import { PeoplePage } from "@/pages/People";
+import { ContactFormDialog } from "@/features/people/ContactFormDialog";
+import { PeopleRoutes } from "@/features/people/PeopleRoutes";
 import { PipelinePage } from "@/pages/Pipeline";
 import { RemindersPage } from "@/pages/Reminders";
 import { SettingsPage } from "@/pages/Settings";
@@ -39,7 +40,7 @@ export function AppShell() {
             >
               <Routes location={location}>
                 <Route path="/" element={<HomePage />} />
-                <Route path="/people/*" element={<PeoplePage />} />
+                <Route path="/people/*" element={<PeopleRoutes />} />
                 <Route path="/pipeline" element={pipelineEnabled ? <PipelinePage /> : <Navigate to="/" replace />} />
                 <Route path="/reminders" element={<RemindersPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
@@ -51,6 +52,7 @@ export function AppShell() {
         <AssistantPanel />
       </div>
       <CommandPalette />
+      <ContactFormDialog />
     </div>
   );
 }
