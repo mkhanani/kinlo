@@ -2,6 +2,10 @@
 # A release is checked, tested, built for every platform and attached to a DRAFT release.
 # Nothing is public until a person reviews the draft and presses Publish.
 #
+# Every download is signed with the update key (the TAURI_SIGNING_PRIVATE_KEY secret), and
+# the last job adds latest.json, the file a running kinlo reads when someone presses
+# "Check for updates". An installed kinlo only accepts a download carrying that signature.
+#
 # There are two ways to start one, and they do the same thing:
 #   - push a tag `v*` that is on `main`, or
 #   - in the Actions tab, open this workflow, press "Run workflow" on `main` and type the
@@ -82,6 +86,16 @@ jobs:
             echo "::error::This commit is not on main. Production releases are cut from main only."
             exit 1
           fi
+      - name: The update key is set
+        if: steps.published.outputs.proceed == 'true'
+        env:
+          # Only whether it exists. The key itself is given to the build step alone.
+          HAS_UPDATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: |
+          if [ "$HAS_UPDATE_KEY" != "true" ]; then
+            echo "::error::The TAURI_SIGNING_PRIVATE_KEY secret is missing. Without it the release cannot be signed, and installed copies of kinlo would refuse it as an update. See docs/ENVIRONMENTS.md, \"The update key\"."
+            exit 1
+          fi
 
   test:
     needs: verify
@@ -127,6 +141,9 @@ jobs:
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs each download so an installed kinlo can tell it is genuine.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           tagName: ${{ env.RELEASE_TAG }}
           releaseName: kinlo ${{ env.RELEASE_TAG }}
@@ -134,7 +151,9 @@ jobs:
           # publishing the draft creates the tag from this commit.
           releaseCommitish: ${{ github.sha }}
           releaseBody: |
-            Download the file for your computer from the assets below.
+            Already using kinlo 0.2.0 or later? Open Settings, then Updates, and press Check for updates.
+
+            To install it fresh, download the file for your computer from the assets below. The `.sig` files and `latest.json` are for the updater and can be ignored.
 
             - **Windows:** the `-setup.exe` file
             - **macOS:** the `aarch64.dmg` file for Apple Silicon (M1 and later), the `x64.dmg` file for Intel
@@ -143,5 +162,34 @@ jobs:
             kinlo is not code-signed, so Windows and macOS warn you the first time you open it. The README explains how to get past that: https://github.com/mkhanani/kinlo#install
           releaseDraft: true
           prerelease: false
+          # latest.json is written once, by the next job, after every build has finished.
+          # Four builds each editing the same file could overwrite one another.
           uploadUpdaterJson: false
-          args: ${{ matrix.args }}
+          uploadUpdaterSignatures: true
+          args: --config src-tauri/tauri.release.conf.json ${{ matrix.args }}
+
+  manifest:
+    name: Update file
+    needs: [verify, build]
+    if: needs.verify.outputs.proceed == 'true'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Collect the signatures
+        run: gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "*.sig" --dir signatures
+      - name: Write latest.json
+        # Fails, and writes nothing, unless every system's download is there and signed
+        # for this version.
+        run: |
+          node scripts/make-update-manifest.mjs "$RELEASE_TAG" signatures > latest.json
+          cat latest.json
+      - name: Attach it to the draft
+        run: gh release upload "$RELEASE_TAG" latest.json --repo "$GITHUB_REPOSITORY" --clobber

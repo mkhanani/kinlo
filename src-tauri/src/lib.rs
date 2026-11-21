@@ -4,6 +4,7 @@ mod db;
 mod files;
 mod keychain;
 mod notifier;
+mod updates;
 mod window;
 
 use std::sync::Arc;
@@ -43,6 +44,8 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
+        // Used only from `updates`: nothing is checked or downloaded until the person asks.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec![background::HIDDEN_ARG]),
@@ -52,6 +55,7 @@ pub fn run() {
         .manage(keychain::Keys(Arc::new(keychain::SystemKeychain::new(
             channel.keychain_service(),
         ))))
+        .manage(updates::Updates::new(channel == Channel::Production))
         .invoke_handler(tauri::generate_handler![
             notifier::schedule_notifications,
             notifier::notify_now,
@@ -63,6 +67,8 @@ pub fn run() {
             files::pick_text_file,
             files::data_location,
             files::open_data_folder,
+            updates::check_for_update,
+            updates::install_update,
         ])
         .setup(move |app| {
             if let Some(main) = app.get_webview_window("main") {

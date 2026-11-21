@@ -74,7 +74,9 @@ To use the assistant with an API key, a keyring service such as GNOME Keyring or
 
 - Your data is one SQLite file on your computer. Settings shows where it is.
 - There is no account, no kinlo server, no analytics and no crash reporting.
-- kinlo makes no network calls at all, with one exception: if you connect an AI model, your questions go to the provider you chose, and only when you ask something.
+- kinlo goes online in two cases only, and both start with you:
+  - If you connect an AI model, your questions go to the provider you chose, when you ask something.
+  - If you press **Check for updates**, kinlo asks GitHub, where it is published, whether there is a newer version. Nothing about you or your data is sent.
 - API keys are stored in your operating system's keychain, never in kinlo's files.
 
 More detail: [where data lives](docs/DATA.md) and [what the assistant sends](docs/ASSISTANT.md).
@@ -87,13 +89,14 @@ It can look things up by itself. It cannot change anything by itself: every addi
 
 ## Updating
 
-kinlo does not update itself yet. To get a new version:
+Open **Settings → Updates** and press **Check for updates**. If there is a newer version, press **Update and restart**: kinlo downloads it, checks that it really comes from this project, installs it and opens again.
 
-1. Download the file for your system from the [latest release](https://github.com/mkhanani/kinlo/releases/latest).
-2. Quit kinlo completely. Closing the window is not enough if "Keep running in the background" is on: use **Settings → Quit kinlo**, or the kinlo icon in the system tray.
-3. Run the installer (on macOS, drag the new kinlo over the old one in Applications). It replaces the old version.
+- kinlo never looks for updates by itself. It goes online for this only when you press the button.
+- Your data is not touched: it lives in its own folder, not inside the app.
+- On Linux, a kinlo installed from the `.deb` or `.rpm` asks for your password to install the update. The `.AppImage` replaces itself.
+- Versions before 0.2.0 do not have the button. To move from one of those, download the newer version from the [latest release](https://github.com/mkhanani/kinlo/releases/latest), quit kinlo completely (**Settings → Quit kinlo**, or the kinlo icon in the system tray) and run the installer. That is needed once.
 
-Your data is not touched: it lives in its own folder, not inside the app. The first-open warning for an unsigned app appears again for each new version.
+You can always update by hand that same way instead.
 
 ## Backing up
 
@@ -101,7 +104,7 @@ Close kinlo and copy the database file that **Settings → Your data** points to
 
 ## Not in this version
 
-Sync between devices, a phone app, email or calendar integration, shared use by more than one person, automatic updates, and code signing.
+Sync between devices, a phone app, email or calendar integration, shared use by more than one person, updates that install without being asked, and code signing.
 
 ## Building from source
 
