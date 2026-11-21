@@ -1,7 +1,7 @@
 {
   "name": "kinlo",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Local-first personal CRM for desktop with bring-your-own-key AI.",
   "license": "MIT",
@@ -18,7 +18,8 @@
     "tauri": "tauri",
     "app:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "app:build:staging": "tauri build --config src-tauri/tauri.staging.conf.json",
-    "app:build": "tauri build"
+    "app:build": "tauri build",
+    "icons": "node scripts/make-icons.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.107",

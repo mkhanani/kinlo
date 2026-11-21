@@ -49,6 +49,8 @@ It fails if the app does not start, crashes, or does not migrate its database. I
 
 The operating system derives the data folder from the identifier, so each flavor has its own SQLite file. The keychain service name is derived from it too (`Channel::keychain_service` in `src-tauri/src/channel.rs`), so a staging build cannot read or overwrite the API keys of the released app. All three can be installed side by side.
 
+The icons are drawn in `assets/icon/` as four SVG files: the released app and the staging flavor, each in a large version and a heavier one for 16 to 48px, where thin lines disappear. `npm run icons` rebuilds every icon file and the Windows installer pictures from them. To change the logo, replace those drawings and run it.
+
 The differences live in two small overlay files, `src-tauri/tauri.dev.conf.json` and `src-tauri/tauri.staging.conf.json`, merged over `tauri.conf.json`. The app code is identical. Unknown identifiers are treated as dev, never as production.
 
 Rule for new code: anything stored outside the app data folder must be keyed by channel.
