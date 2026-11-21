@@ -1,6 +1,6 @@
 # The assistant
 
-kinlo's assistant is optional. Nothing else in the app depends on it, and until a model is connected it makes no network calls at all.
+kinlo's assistant is optional. Nothing else in the app depends on it, and until a model is connected it sends nothing anywhere.
 
 It is "bring your own key": you connect a model from Anthropic, OpenAI or Google with your own API key, or a model running on your own computer through Ollama. kinlo has no server and no account in between.
 
