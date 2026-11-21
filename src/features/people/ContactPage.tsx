@@ -15,6 +15,9 @@ import {
   MapPin,
   MoreHorizontal,
   Pencil,
+  PenLine,
+  ScrollText,
+  Sparkles,
   Phone,
   Plus,
   Trash2,
@@ -29,6 +32,8 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Textarea } from "@/components/ui/Field";
 import { Menu, MenuItem, MenuSeparator } from "@/components/ui/Menu";
+import { useFocusOn } from "@/ai/focus";
+import { useAskAssistant } from "@/features/assistant/useAskAssistant";
 import { Page } from "@/components/ui/Page";
 import { overdueDays } from "@/data/contacts";
 import {
@@ -89,6 +94,10 @@ function ContactView({ contact }: { contact: Contact }) {
   const remove = useDeleteContact();
   const navigate = useNavigate();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const { aiProvider } = useSettings();
+  const { ask, prefill, focusBox } = useAskAssistant();
+  // Lets the assistant know who "them" is while this page is open.
+  useFocusOn(contact);
 
   const overdue = overdueDays(contact);
   const work = [contact.role, contact.company].filter(Boolean).join(" at ");
@@ -119,6 +128,24 @@ function ContactView({ contact }: { contact: Contact }) {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {aiProvider && (
+            <Menu
+              // Both items hand over to the assistant's message box.
+              afterClose={focusBox}
+              trigger={
+                <Button aria-label="Ask the assistant" className="!px-2">
+                  <Sparkles size={15} strokeWidth={1.5} />
+                </Button>
+              }
+            >
+              <MenuItem onSelect={() => ask(`Summarize where things stand with ${contact.name}.`)}>
+                <ScrollText size={15} strokeWidth={1.5} /> Summarize
+              </MenuItem>
+              <MenuItem onSelect={() => prefill(`Draft a short message to ${contact.name} `)}>
+                <PenLine size={15} strokeWidth={1.5} /> Draft a message
+              </MenuItem>
+            </Menu>
+          )}
           <Button onClick={() => openForm(contact.id)}>
             <Pencil size={14} strokeWidth={1.5} /> Edit
           </Button>

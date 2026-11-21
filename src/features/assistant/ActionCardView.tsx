@@ -5,6 +5,9 @@ import type { ActionState } from "@/ai/engine";
 import { Button } from "@/components/ui/Button";
 import type { Side } from "@/data";
 
+/** Where a card's wording is cached, so other code can read what the user was shown. */
+export const cardQueryKey = (approvalId: string, side: Side) => ["ai", "card", approvalId, side] as const;
+
 const STATE_LABEL: Record<Exclude<ActionState, "pending">, string> = {
   saving: "Saving",
   done: "Saved",
@@ -39,7 +42,7 @@ export function ActionCardView({
   onDecide: (approved: boolean) => void;
 }) {
   const { data: card } = useQuery({
-    queryKey: ["ai", "card", approvalId, side] as const,
+    queryKey: cardQueryKey(approvalId, side),
     queryFn: () => describeAction(toolName, input, { side, currency }),
   });
   if (!card) return null;
