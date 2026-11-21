@@ -8,6 +8,7 @@ import { HomePage } from "@/pages/Home";
 import { ContactFormDialog } from "@/features/people/ContactFormDialog";
 import { PeopleRoutes } from "@/features/people/PeopleRoutes";
 import { PipelinePage } from "@/pages/Pipeline";
+import { ReminderFormDialog } from "@/features/reminders/ReminderFormDialog";
 import { RemindersPage } from "@/pages/Reminders";
 import { SettingsPage } from "@/pages/Settings";
 import { pageVariants } from "@/lib/motion";
@@ -52,6 +53,7 @@ export function AppShell() {
       </div>
       <CommandPalette />
       <ContactFormDialog />
+      <ReminderFormDialog />
     </div>
   );
 }

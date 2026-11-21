@@ -29,6 +29,8 @@ pub fn migrations() -> Vec<Migration> {
         migration!(4, "notes are not contact", "0004_notes_are_not_contact.sql"),
         migration!(5, "sides", "0005_sides.sql"),
         migration!(6, "avatars", "0006_avatars.sql"),
+        migration!(7, "reminder sides", "0007_reminder_sides.sql"),
+        migration!(8, "snooze", "0008_snooze.sql"),
     ]
 }
 

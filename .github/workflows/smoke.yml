@@ -1,0 +1,89 @@
+# Desktop smoke.
+# Builds the real app and runs it on real Windows, macOS and Linux machines: starts it,
+# walks the welcome setup and adds a person by keyboard, takes screenshots, and checks the
+# app's own database afterwards. The screenshots are attached to the run.
+#
+# This is evidence that the app works on each system, beyond "it compiles". It is not a
+# required check: hosted machines sometimes refuse scripted keystrokes.
+name: Desktop smoke
+
+on:
+  pull_request:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  smoke:
+    name: Runs on ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Windows, slug: windows, os: windows-latest }
+          - { name: macOS, slug: macos, os: macos-latest }
+          - { name: Linux, slug: linux, os: ubuntu-22.04 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    permissions:
+      # To publish the screenshots branch. Nothing else is written.
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Linux dependencies
+        timeout-minutes: 10
+        if: runner.os == 'Linux'
+        run: |
+          APT="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o DPkg::Lock::Timeout=120"
+          $APT update
+          $APT install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev xvfb xdotool imagemagick
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: Build the app
+        run: npx tauri build --debug --no-bundle --config src-tauri/tauri.staging.conf.json
+      - name: Run it (Windows and macOS)
+        if: runner.os != 'Linux'
+        run: node scripts/smoke.mjs
+      - name: Run it (Linux, in a virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a -s "-screen 0 1280x840x24" node scripts/smoke.mjs
+      - name: Attach screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-${{ matrix.name }}
+          path: smoke-out
+          if-no-files-found: warn
+          retention-days: 14
+      # Also keep the latest screenshots on a branch per system, where they can be
+      # browsed on GitHub without downloading anything. Each run replaces the last.
+      - name: Publish screenshots to a branch
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd smoke-out || exit 0
+          git init -q -b results
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Smoke results: ${{ matrix.name }} at ${GITHUB_SHA::7}"
+          git push -q -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "results:refs/heads/smoke-results/${{ matrix.slug }}"

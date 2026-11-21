@@ -23,6 +23,19 @@ Staging and Production both run the full Testing suite first. A build never star
 
 Production has two extra guards: the tag must equal the app version (`v0.1.0` for version `0.1.0`), and the tagged commit must already be on `main`. A tag pushed from any other branch fails before anything is built.
 
+## Running on Windows, macOS and Linux
+
+"It compiles" is not the same as "it works". The **Desktop smoke** workflow (`.github/workflows/smoke.yml`, `scripts/smoke.mjs`) builds the staging flavor and runs it on real Windows, macOS and Linux machines on every pull request and every push to `staging`. On each one it:
+
+1. starts the app and waits for it to create its database,
+2. walks the welcome setup and adds a person using only the keyboard,
+3. takes screenshots along the way,
+4. reads the app's database afterwards to check all migrations ran, the setup finished and the person was saved.
+
+The screenshots are attached to the run, and the latest set for each system is kept on the branches `smoke-results/windows`, `smoke-results/macos` and `smoke-results/linux`, where they can be browsed on GitHub.
+
+It fails if the app does not start, crashes, or does not migrate its database. It is not a required check, because hosted machines sometimes refuse scripted keystrokes; when that happens the run passes with a warning and the screenshots still show the app on screen.
+
 ## The three app flavors
 
 | | dev | staging | production |

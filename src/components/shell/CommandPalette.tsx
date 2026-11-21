@@ -3,7 +3,7 @@ import type { KeyboardEvent, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeftRight, Bell, Columns3, House, Search, Settings, UserPlus, Users } from "lucide-react";
+import { ArrowLeftRight, Bell, BellPlus, Columns3, House, Search, Settings, UserPlus, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useSaveSetting, useSettings, useSide } from "@/app/settings";
 import { Avatar } from "@/components/ui/Avatar";
@@ -75,6 +75,7 @@ function PaletteBody({ close }: { close: () => void }) {
   const [active, setActive] = useState(0);
   const navigate = useNavigate();
   const openContactForm = useUI((s) => s.openContactForm);
+  const openReminderForm = useUI((s) => s.openReminderForm);
   const { sides } = useSettings();
   const side = useSide();
   const save = useSaveSetting();
@@ -97,6 +98,7 @@ function PaletteBody({ close }: { close: () => void }) {
     ];
     const actions: Item[] = [
       { id: "add-person", group: "Actions", label: "Add person", icon: icon(UserPlus), run: () => openContactForm() },
+      { id: "add-reminder", group: "Actions", label: "Add reminder", icon: icon(BellPlus), run: () => openReminderForm() },
       ...(sides === "both"
         ? [
             {
@@ -129,7 +131,7 @@ function PaletteBody({ close }: { close: () => void }) {
     }));
     const matches = (item: Item) => item.label.toLowerCase().includes(q);
     return [...people, ...pages.filter(matches), ...actions.filter(matches)];
-  }, [query, search, hits, side, sides, save, navigate, close, openContactForm]);
+  }, [query, search, hits, side, sides, save, navigate, close, openContactForm, openReminderForm]);
 
   useEffect(() => setActive(0), [query, items.length]);
 
