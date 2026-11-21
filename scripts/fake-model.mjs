@@ -47,6 +47,45 @@ function reply(body) {
   const denied = results.some((r) => /cancel|denied/i.test(textOf(r)));
   const saved = results.some((r) => /"saved":true/.test(textOf(r)));
 
+  const system = String(messages[0]?.role === "system" ? messages[0].content : "");
+  const focusId = /page open \(id: ([^)]+)\)/.exec(system)?.[1] ?? null;
+  const field = (name) => new RegExp(`"${name}":"([^"]*)"`).exec(results.map(textOf).join(" "))?.[1] ?? null;
+
+  // The one-line quick add in the command palette.
+  if (system.includes("quick add box")) {
+    if (denied) return "Nothing was saved.";
+    if (saved) return "Saved.";
+    if (!results.length) return [call("search_contacts", { query: "Zoë" })];
+    const id = firstId();
+    if (!id) return [call("create_contact", { name: "Zoë Nakamura" })];
+    const due = new Date(Date.now() + 3 * 86_400_000);
+    const pad = (n) => String(n).padStart(2, "0");
+    return [
+      call("log_interaction", { contact_id: id, type: "meeting", summary: "Coffee. She is moving to Lisbon in the spring." }),
+      call("create_reminder", {
+        title: "Send Zoë the photos",
+        due_at: `${due.getFullYear()}-${pad(due.getMonth() + 1)}-${pad(due.getDate())}T09:00`,
+        contact_id: id,
+      }),
+    ];
+  }
+  if (asked.startsWith("summarize") && focusId) {
+    if (!results.length) return [call("get_contact", { contact_id: focusId })];
+    const name = field("name") ?? "They";
+    const company = field("company");
+    const summary = field("summary");
+    return [
+      `${name}${company ? ` works at ${company}` : " is one of your people"}.`,
+      summary ? `You were last in touch a while ago: ${summary.toLowerCase()}.` : "You have not logged a conversation yet.",
+      "",
+      "**Next:** send a short note to catch up.",
+    ].join("\n");
+  }
+  if (asked.startsWith("draft") && focusId) {
+    if (!results.length) return [call("get_contact", { contact_id: focusId })];
+    const first = (field("name") ?? "there").split(" ")[0];
+    return `Hi ${first}, it has been too long. How did things go with the rebrand? I would love to hear about it over coffee next week.`;
+  }
   if (asked.includes("catch up")) {
     if (!results.length) return [call("list_overdue_contacts", {})];
     const names = [...results.map(textOf).join(" ").matchAll(/"name":"([^"]+)"/g)].map((m) => m[1]);

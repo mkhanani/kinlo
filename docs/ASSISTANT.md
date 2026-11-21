@@ -8,7 +8,7 @@ It is "bring your own key": you connect a model from Anthropic, OpenAI or Google
 
 Only what a question needs, and only to the provider you chose.
 
-- Your question, the conversation so far, and the standing instructions (today's date, your first name, which side of kinlo is open).
+- Your question, the conversation so far, and the standing instructions (today's date, your first name, which side of kinlo is open, and the name of the person whose page you have open, if any, so that "them" means that person).
 - Whatever the assistant looks up to answer: for example the people a search finds, or one person's details and recent conversations.
 
 Nothing is sent in the background, nothing is sent when the panel is closed, and the rest of your data is never uploaded. With Ollama nothing leaves the computer at all. Settings says which of these applies to the provider you have picked.
@@ -38,6 +38,12 @@ The assistant can look things up by itself. It cannot change anything by itself.
 When it wants to add a person, update one, log a conversation, set a reminder, add a deal or move one, kinlo shows a card with exactly what would be saved, and waits. Nothing is written until you press Confirm. Cancel leaves everything as it was, and so does sending another message without answering the card.
 
 This is enforced in code, not by asking the model nicely: writing tools are marked as needing approval, and the tool only runs on a later turn, after your answer has been recorded (`src/ai/engine.ts`).
+
+## Where it shows up
+
+- **The panel** (Ctrl or Cmd + J): ask anything about your people, or tell it what happened. Conversations here are kept.
+- **Quick add** (Ctrl or Cmd + K): type a sentence, such as "Had coffee with Ana, remind me to send the photos on Friday", and choose Quick add. The changes it would make appear as cards right there; Enter confirms them, Esc closes without saving. It only appears for a sentence, and after any people or pages that match, so searching works as before. A quick add is not kept as a conversation.
+- **On a person's page**, once a provider is chosen: **Summarize** gives a short account of where things stand, and **Draft a message** starts a request in the panel for you to finish ("...about her new job"). A draft is text to copy; kinlo cannot send anything.
 
 ## What it can do
 

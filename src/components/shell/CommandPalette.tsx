@@ -12,27 +12,33 @@ import {
   House,
   Search,
   Settings,
+  Sparkles,
   UserPlus,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useAssistantStatus } from "@/ai/hooks";
 import { useSaveSetting, useSettings, useSide } from "@/app/settings";
 import { Avatar } from "@/components/ui/Avatar";
 import { useContactSearch } from "@/data/hooks";
+import { QuickAdd } from "@/features/assistant/QuickAdd";
 import { dialogVariants } from "@/lib/motion";
 import { useDebounced } from "@/lib/useDebounced";
 import { useUI } from "@/store/ui";
 
 interface Item {
   id: string;
-  group: "People" | "Go to" | "Actions";
+  group: "People" | "Go to" | "Actions" | "Assistant";
   label: string;
   detail?: string;
   icon: ReactNode;
   run: () => void;
 }
 
-/** Ctrl/Cmd+K: find a person, jump to a page, or start adding someone. */
+/**
+ * Ctrl/Cmd+K: find a person, jump to a page, start adding someone, or, with a model
+ * connected, say what happened in one line and let the assistant file it.
+ */
 export function CommandPalette() {
   const open = useUI((s) => s.paletteOpen);
   const setOpen = useUI((s) => s.setPaletteOpen);
@@ -84,6 +90,9 @@ function icon(Icon: LucideIcon) {
 function PaletteBody({ close }: { close: () => void }) {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
+  // Set once a line has been handed to the assistant. The palette then shows its cards.
+  const [quick, setQuick] = useState<string | null>(null);
+  const assistantReady = useAssistantStatus().state === "ready";
   const navigate = useNavigate();
   const openContactForm = useUI((s) => s.openContactForm);
   const openReminderForm = useUI((s) => s.openReminderForm);
@@ -92,10 +101,12 @@ function PaletteBody({ close }: { close: () => void }) {
   const side = useSide();
   const save = useSaveSetting();
   const search = useDebounced(query, 100);
-  const { data: hits = [], isPlaceholderData } = useContactSearch(search, side);
+  const { data: hits = [], isPlaceholderData, isFetching } = useContactSearch(search, side);
   // Results lag a moment behind typing. Until they catch up, the people listed are
-  // matches for what was typed before, and Enter must not open one of them.
-  const catchingUp = query.trim() !== search.trim() || (search.trim() !== "" && isPlaceholderData);
+  // matches for what was typed before (or, for a first search, nobody at all), and
+  // Enter must not act on that.
+  const catchingUp =
+    query.trim() !== search.trim() || (search.trim() !== "" && (isPlaceholderData || isFetching));
   const enterWaiting = useRef(false);
 
   const items = useMemo<Item[]>(() => {
@@ -149,8 +160,37 @@ function PaletteBody({ close }: { close: () => void }) {
       run: go(`/people/${contact.id}`),
     }));
     const matches = (item: Item) => item.label.toLowerCase().includes(q);
-    return [...people, ...pages.filter(matches), ...actions.filter(matches)];
-  }, [query, search, hits, side, sides, save, navigate, close, openContactForm, openReminderForm, openDealForm]);
+    // A sentence, not a search: offer to hand it to the assistant. It comes last, so
+    // Enter still opens a person or a page whenever something matches.
+    const typed = query.trim();
+    const quickAdd: Item[] =
+      assistantReady && typed.length >= 8 && typed.includes(" ")
+        ? [
+            {
+              id: "quick-add",
+              group: "Assistant",
+              label: "Quick add",
+              detail: typed,
+              icon: icon(Sparkles),
+              run: () => setQuick(typed),
+            },
+          ]
+        : [];
+    return [...people, ...pages.filter(matches), ...actions.filter(matches), ...quickAdd];
+  }, [
+    query,
+    search,
+    hits,
+    side,
+    sides,
+    save,
+    navigate,
+    close,
+    openContactForm,
+    openReminderForm,
+    openDealForm,
+    assistantReady,
+  ]);
 
   useEffect(() => setActive(0), [query, items.length]);
 
@@ -175,6 +215,8 @@ function PaletteBody({ close }: { close: () => void }) {
     items[0]?.run();
   }, [catchingUp, items]);
 
+  if (quick !== null) return <QuickAdd text={quick} close={close} />;
+
   return (
     <div onKeyDown={onKeyDown}>
       <div className="flex h-12 items-center gap-3 border-b border-hairline px-4">
@@ -183,7 +225,7 @@ function PaletteBody({ close }: { close: () => void }) {
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search people or jump to a page"
+          placeholder={assistantReady ? "Search, or say what happened" : "Search people or jump to a page"}
           role="combobox"
           aria-expanded
           aria-controls="palette-list"
