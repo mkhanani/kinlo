@@ -77,7 +77,14 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: kinlo ${{ github.ref_name }}
-          releaseBody: See the assets below to download and install this version.
+          releaseBody: |
+            Download the file for your computer from the assets below.
+
+            - **Windows:** the `-setup.exe` file
+            - **macOS:** the `aarch64.dmg` file for Apple Silicon (M1 and later), the `x64.dmg` file for Intel
+            - **Linux:** the `.AppImage`, `.deb` or `.rpm` file
+
+            kinlo is not code-signed, so Windows and macOS warn you the first time you open it. The README explains how to get past that: https://github.com/mkhanani/kinlo#install
           releaseDraft: true
           prerelease: false
           uploadUpdaterJson: false
