@@ -1,13 +1,20 @@
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { Monitor, Sun, Moon } from "lucide-react";
-import { Page, PageHeader } from "@/components/ui/Page";
+import { Monitor, Moon, Sun } from "lucide-react";
 import { useSaveSetting, useSettings } from "@/app/settings";
-import type { ThemePref } from "@/data/settings";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Field";
+import { Page, PageHeader } from "@/components/ui/Page";
+import { Segmented } from "@/components/ui/Segmented";
+import type { SidesChoice, ThemePref } from "@/data/settings";
 
 export function SettingsPage() {
-  const { theme, pipelineEnabled } = useSettings();
+  const { theme, sides, userName } = useSettings();
   const save = useSaveSetting();
-  const options: { value: ThemePref; label: string; icon: typeof Sun }[] = [
+  const [name, setName] = useState(userName ?? "");
+  useEffect(() => setName(userName ?? ""), [userName]);
+
+  const themes: { value: ThemePref; label: string; icon: typeof Sun }[] = [
     { value: "system", label: "System", icon: Monitor },
     { value: "light", label: "Light", icon: Sun },
     { value: "dark", label: "Dark", icon: Moon },
@@ -17,12 +24,38 @@ export function SettingsPage() {
     <Page>
       <PageHeader title="Settings" />
       <div className="glass divide-y divide-hairline">
+        <Row label="Your name" hint="Used when kinlo greets you.">
+          <Input
+            aria-label="Your name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => name.trim() !== (userName ?? "") && save("userName", name.trim() || null)}
+            placeholder="First name"
+            className="!w-[220px]"
+          />
+        </Row>
+        <Row
+          label="Use kinlo for"
+          hint="Personal keeps track of the people in your life. Business adds leads, clients and the pipeline."
+        >
+          <Segmented<SidesChoice>
+            label="Use kinlo for"
+            value={sides}
+            onChange={(value) => save("sides", value)}
+            options={[
+              { value: "personal", label: "Personal" },
+              { value: "business", label: "Business" },
+              { value: "both", label: "Both" },
+            ]}
+          />
+        </Row>
         <Row label="Theme" hint="Follows your system unless you pick one.">
-          <div className="control flex p-0.5">
-            {options.map(({ value, label, icon: Icon }) => (
+          <div className="control flex p-0.5 hover:!bg-control">
+            {themes.map(({ value, label, icon: Icon }) => (
               <button
                 key={value}
                 onClick={() => save("theme", value)}
+                aria-pressed={theme === value}
                 className={`flex h-7 items-center gap-1.5 rounded-[8px] px-2.5 text-sm transition-colors duration-200 ${
                   theme === value ? "bg-active text-fg" : "text-muted hover:text-fg"
                 }`}
@@ -32,8 +65,8 @@ export function SettingsPage() {
             ))}
           </div>
         </Row>
-        <Row label="Pipeline" hint="Turn off if you only use kinlo for the people in your life.">
-          <Switch checked={pipelineEnabled} onChange={(on) => save("pipelineEnabled", on)} label="Show pipeline" />
+        <Row label="Welcome setup" hint="Go through the first-run questions again. Your people and data are not touched.">
+          <Button onClick={() => save("onboarded", false)}>Run again</Button>
         </Row>
       </div>
     </Page>
@@ -43,31 +76,11 @@ export function SettingsPage() {
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-6 px-5 py-4">
-      <div>
+      <div className="min-w-0">
         <div className="text-base font-medium">{label}</div>
         {hint && <div className="mt-0.5 text-sm text-muted">{hint}</div>}
       </div>
-      {children}
+      <div className="shrink-0">{children}</div>
     </div>
-  );
-}
-
-export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
-  return (
-    <button
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => onChange(!checked)}
-      className={`relative h-5 w-9 rounded-full border border-hairline transition-colors duration-200 ${
-        checked ? "bg-fg" : "bg-control"
-      }`}
-    >
-      <span
-        className={`absolute top-0.5 h-3.5 w-3.5 rounded-full transition-[left,background-color] duration-200 ease-out ${
-          checked ? "left-[18px] bg-bg" : "left-0.5 bg-muted"
-        }`}
-      />
-    </button>
   );
 }

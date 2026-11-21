@@ -26,6 +26,9 @@ pub fn migrations() -> Vec<Migration> {
         migration!(1, "schema", "0001_schema.sql"),
         migration!(2, "search", "0002_search.sql"),
         migration!(3, "seed stages", "0003_seed_stages.sql"),
+        migration!(4, "notes are not contact", "0004_notes_are_not_contact.sql"),
+        migration!(5, "sides", "0005_sides.sql"),
+        migration!(6, "avatars", "0006_avatars.sql"),
     ]
 }
 
@@ -95,6 +98,7 @@ mod tests {
         for table in [
             "ai_messages",
             "ai_threads",
+            "avatars",
             "contact_tags",
             "contacts",
             "deals",
@@ -150,8 +154,8 @@ mod tests {
     async fn full_text_search_and_last_contacted_work_in_the_bundled_sqlite() {
         let pool = migrated().await;
         pool.execute(
-            "INSERT INTO contacts (id, name, company, created_at, updated_at)
-             VALUES ('c1', 'Zoë Nakamura', 'Fernhill Studio', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+            "INSERT INTO contacts (id, name, company, personal, created_at, updated_at)
+             VALUES ('c1', 'Zoë Nakamura', 'Fernhill Studio', 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
         )
         .await
         .unwrap();
@@ -186,8 +190,8 @@ mod tests {
     async fn numbered_placeholders_bind_by_number_not_by_position() {
         let pool = migrated().await;
         pool.execute(
-            "INSERT INTO contacts (id, name, created_at, updated_at)
-             VALUES ('c1', 'Before', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+            "INSERT INTO contacts (id, name, business, created_at, updated_at)
+             VALUES ('c1', 'Before', 'client', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
         )
         .await
         .unwrap();
@@ -210,5 +214,92 @@ mod tests {
             row.get::<String, _>("updated_at"),
             "2026-02-02T00:00:00.000Z"
         );
+    }
+
+    /// Databases made before the two sides existed must come through the upgrade intact.
+    #[tokio::test]
+    async fn upgrading_an_older_database_keeps_people_and_sorts_them_into_sides() {
+        let options = SqliteConnectOptions::from_str("sqlite::memory:").unwrap();
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .unwrap();
+        let all = migrations();
+        for m in &all[..3] {
+            pool.execute(m.sql).await.unwrap();
+        }
+
+        // Data as the app wrote it at schema version 3.
+        for (id, kind) in [
+            ("p", "personal"),
+            ("c", "client"),
+            ("l", "lead"),
+            ("o", "other"),
+        ] {
+            sqlx::query(
+                "INSERT INTO contacts (id, name, kind, created_at, updated_at)
+                 VALUES ($1, $1, $2, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+            )
+            .bind(id)
+            .bind(kind)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        pool.execute(
+            "INSERT INTO interactions (id, contact_id, type, happened_at, created_at) VALUES
+               ('i1', 'p', 'call', '2026-02-01T00:00:00.000Z', '2026-02-01T00:00:00.000Z'),
+               ('i2', 'p', 'note', '2026-03-01T00:00:00.000Z', '2026-03-01T00:00:00.000Z'),
+               ('i3', 'c', 'note', '2026-03-01T00:00:00.000Z', '2026-03-01T00:00:00.000Z')",
+        )
+        .await
+        .unwrap();
+
+        for m in &all[3..] {
+            pool.execute(m.sql)
+                .await
+                .unwrap_or_else(|e| panic!("migration {} failed on existing data: {e}", m.version));
+        }
+
+        let rows = sqlx::query(
+            "SELECT id, personal, business, last_contacted_at FROM contacts ORDER BY id",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        let got: Vec<(String, i64, Option<String>, Option<String>)> = rows
+            .iter()
+            .map(|r| {
+                (
+                    r.get("id"),
+                    r.get("personal"),
+                    r.get("business"),
+                    r.get("last_contacted_at"),
+                )
+            })
+            .collect();
+        assert_eq!(
+            got,
+            [
+                // The note no longer counts, so the client has had no contact at all.
+                ("c".into(), 0, Some("client".into()), None),
+                ("l".into(), 0, Some("lead".into()), None),
+                ("o".into(), 0, Some("other".into()), None),
+                // Falls back from the note to the call before it.
+                ("p".into(), 1, None, Some("2026-02-01T00:00:00.000Z".into())),
+            ]
+        );
+
+        // Search still finds them, and nobody can be left without a side.
+        let hit = sqlx::query("SELECT contact_id FROM search WHERE search MATCH '\"p\"*'")
+            .fetch_optional(&pool)
+            .await
+            .unwrap();
+        assert!(hit.is_some());
+        let sideless = sqlx::query("UPDATE contacts SET personal = 0 WHERE id = 'p'")
+            .execute(&pool)
+            .await;
+        assert!(sideless.is_err());
     }
 }

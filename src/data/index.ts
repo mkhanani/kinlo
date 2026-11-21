@@ -5,5 +5,6 @@ export * from "./interactions";
 export * from "./reminders";
 export * from "./deals";
 export * from "./ai";
+export * from "./avatars";
 export * from "./settings";
 export { openDatabase } from "./driver";

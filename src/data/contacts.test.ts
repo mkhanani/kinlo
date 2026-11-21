@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addInteraction,
   archiveContact,
+  countContacts,
   createContact,
   createDeal,
   createReminder,
@@ -14,6 +15,12 @@ import {
   listOverdueContacts,
   listReminders,
   listTags,
+  loadAvatars,
+  overdueDays,
+  removeAvatar,
+  renameTag,
+  deleteTag,
+  setAvatar,
   searchContacts,
   setContactTags,
   updateContact,
@@ -28,7 +35,8 @@ describe("contacts", () => {
     const c = await createContact({ name: "  Priya Raman  " });
     expect(c).toMatchObject({
       name: "Priya Raman",
-      kind: "personal",
+      personal: true,
+      business: null,
       emails: [],
       phones: [],
       socials: [],
@@ -45,7 +53,7 @@ describe("contacts", () => {
     const c = await createContact({
       name: "Tomás Okafor",
       nickname: "Tom",
-      kind: "client",
+      business: "client",
       company: "Larkspur Co",
       role: "Founder",
       emails: [{ label: "work", value: " tom@larkspur.example " }, { value: "  " }],
@@ -72,16 +80,17 @@ describe("contacts", () => {
 
   it("updates only the fields in the patch", async () => {
     const c = await createContact({ name: "Ana", company: "Northwind", notes: "Likes tea" });
-    const updated = await updateContact(c.id, { company: null, kind: "lead" });
+    const updated = await updateContact(c.id, { company: null, business: "lead" });
     expect(updated.company).toBeNull();
-    expect(updated.kind).toBe("lead");
+    expect(updated.business).toBe("lead");
+    expect(updated.personal).toBe(true);
     expect(updated.notes).toBe("Likes tea");
     expect(updated.name).toBe("Ana");
   });
 
   it("rejects values the schema does not allow", async () => {
     const c = await createContact({ name: "Ana" });
-    await expect(updateContact(c.id, { kind: "enemy" as never })).rejects.toThrow();
+    await expect(updateContact(c.id, { business: "enemy" as never })).rejects.toThrow();
     await expect(updateContact(c.id, { keep_in_touch_days: 0 })).rejects.toThrow();
   });
 
@@ -96,12 +105,12 @@ describe("contacts", () => {
   });
 
   it("filters by kind and by tag", async () => {
-    const ana = await createContact({ name: "Ana", kind: "client" });
-    const bea = await createContact({ name: "Bea", kind: "personal" });
+    const ana = await createContact({ name: "Ana", business: "client" });
+    const bea = await createContact({ name: "Bea" });
     const [family] = await setContactTags(bea.id, ["Family"]);
     await setContactTags(ana.id, ["Design"]);
 
-    expect((await listContacts({ kind: "client" })).map((c) => c.name)).toEqual(["Ana"]);
+    expect((await listContacts({ business: "client" })).map((c) => c.name)).toEqual(["Ana"]);
     expect((await listContacts({ tagId: family!.id })).map((c) => c.name)).toEqual(["Bea"]);
   });
 
@@ -124,6 +133,72 @@ describe("contacts", () => {
   });
 });
 
+describe("sides", () => {
+  it("a person can be personal, business, or both, and each side lists its own", async () => {
+    await createContact({ name: "Friend" });
+    await createContact({ name: "Client", business: "client" });
+    await createContact({ name: "Both", personal: true, business: "lead" });
+
+    expect((await listContacts({ side: "personal" })).map((c) => c.name)).toEqual(["Both", "Friend"]);
+    expect((await listContacts({ side: "business" })).map((c) => c.name)).toEqual(["Both", "Client"]);
+    expect((await listContacts({ side: "business", business: "lead" })).map((c) => c.name)).toEqual(["Both"]);
+    expect(await countContacts("personal")).toBe(2);
+    expect(await countContacts("business")).toBe(2);
+    expect(await countContacts()).toBe(3);
+  });
+
+  it("someone added without a side goes on the personal one, and a business contact does not", async () => {
+    expect(await createContact({ name: "Ana" })).toMatchObject({ personal: true, business: null });
+    expect(await createContact({ name: "Bo", business: "other" })).toMatchObject({ personal: false, business: "other" });
+  });
+
+  it("nobody can be left on no side at all", async () => {
+    await expect(createContact({ name: "Ana", personal: false })).rejects.toThrow("Choose Personal, Business, or both.");
+    const ana = await createContact({ name: "Ana" });
+    await expect(updateContact(ana.id, { personal: false })).rejects.toThrow("Choose Personal, Business, or both.");
+    // Moving across in one step is fine.
+    expect(await updateContact(ana.id, { personal: false, business: "client" })).toMatchObject({
+      personal: false,
+      business: "client",
+    });
+  });
+
+  it("search and overdue can be limited to a side", async () => {
+    const friend = await createContact({ name: "Jordan Friend", keep_in_touch_days: 7 });
+    const client = await createContact({ name: "Jordan Client", business: "client", keep_in_touch_days: 7 });
+    await addInteraction({ contact_id: friend.id, type: "call", happened_at: daysAgo(20) });
+    await addInteraction({ contact_id: client.id, type: "call", happened_at: daysAgo(20) });
+
+    expect((await searchContacts("jordan", 20, "business")).map((h) => h.contact.name)).toEqual(["Jordan Client"]);
+    expect((await searchContacts("jordan", 20, "personal")).map((h) => h.contact.name)).toEqual(["Jordan Friend"]);
+    expect((await listOverdueContacts(NOW, "personal")).map((c) => c.name)).toEqual(["Jordan Friend"]);
+    expect(await listOverdueContacts(NOW)).toHaveLength(2);
+  });
+});
+
+describe("photos", () => {
+  const PIXEL = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+
+  it("are saved, replaced and removed per person", async () => {
+    const ana = await createContact({ name: "Ana" });
+    expect(await loadAvatars()).toEqual({});
+    await setAvatar(ana.id, PIXEL);
+    await setAvatar(ana.id, PIXEL + "AA");
+    expect(await loadAvatars()).toEqual({ [ana.id]: PIXEL + "AA" });
+    await removeAvatar(ana.id);
+    expect(await loadAvatars()).toEqual({});
+  });
+
+  it("go when the person is deleted, and only images are accepted", async () => {
+    const ana = await createContact({ name: "Ana" });
+    await setAvatar(ana.id, PIXEL);
+    await deleteContact(ana.id);
+    expect(await loadAvatars()).toEqual({});
+    const bo = await createContact({ name: "Bo" });
+    await expect(setAvatar(bo.id, "javascript:alert(1)")).rejects.toThrow("not an image");
+  });
+});
+
 describe("tags", () => {
   it("treats names as case-insensitive and never duplicates", async () => {
     const ana = await createContact({ name: "Ana" });
@@ -138,6 +213,21 @@ describe("tags", () => {
     expect((await getContact(ana.id))!.tags.map((t) => t.name)).toEqual(["Design", "Family"]);
   });
 
+  it("can be renamed and deleted without touching the people", async () => {
+    const ana = await createContact({ name: "Ana" });
+    const [friends, work] = await setContactTags(ana.id, ["Friends", "Work"]);
+
+    await renameTag(friends!.id, "Close friends");
+    expect((await getContact(ana.id))!.tags.map((t) => t.name)).toEqual(["Close friends", "Work"]);
+
+    await expect(renameTag(friends!.id, "work")).rejects.toThrow("already a tag with that name");
+    await expect(renameTag(friends!.id, "  ")).rejects.toThrow("needs a name");
+
+    await deleteTag(work!.id);
+    expect((await getContact(ana.id))!.tags.map((t) => t.name)).toEqual(["Close friends"]);
+    expect(await getContact(ana.id)).not.toBeNull();
+  });
+
   it("replaces a person's tags with exactly the new set", async () => {
     const ana = await createContact({ name: "Ana" });
     await setContactTags(ana.id, ["One", "Two"]);
@@ -149,6 +239,25 @@ describe("tags", () => {
 });
 
 describe("interactions and last contacted", () => {
+  it("a note is not contact: it never moves last_contacted_at", async () => {
+    const ana = await createContact({ name: "Ana" });
+    await addInteraction({ contact_id: ana.id, type: "call", happened_at: daysAgo(30) });
+    const note = await addInteraction({ contact_id: ana.id, type: "note", happened_at: daysAgo(1), summary: "Ask about the job" });
+    expect((await getContact(ana.id))!.last_contacted_at).toBe(daysAgo(30));
+
+    // Turning the note into a call counts from then on, and back again undoes it.
+    await updateInteraction(note.id, { type: "call" });
+    expect((await getContact(ana.id))!.last_contacted_at).toBe(daysAgo(1));
+    await updateInteraction(note.id, { type: "note" });
+    expect((await getContact(ana.id))!.last_contacted_at).toBe(daysAgo(30));
+
+    await deleteInteraction(note.id);
+    expect((await getContact(ana.id))!.last_contacted_at).toBe(daysAgo(30));
+    // The note is still searchable while it exists.
+    await addInteraction({ contact_id: ana.id, type: "note", summary: "Loves sailing" });
+    expect(await searchContacts("sailing")).toHaveLength(1);
+  });
+
   it("adding an interaction sets last_contacted_at", async () => {
     const ana = await createContact({ name: "Ana" });
     await addInteraction({ contact_id: ana.id, type: "call", happened_at: daysAgo(3), summary: "Caught up" });
@@ -211,6 +320,10 @@ describe("overdue for contact", () => {
       ["Monthly", 60],
       ["Weekly", 3],
     ]);
+    // The in-memory calculation agrees with the SQL one for everybody.
+    for (const c of await listContacts({}, NOW)) {
+      expect(overdueDays(c, NOW)).toBe(overdue.find((o) => o.id === c.id)?.days_overdue ?? 0);
+    }
     expect((await listContacts({ overdueOnly: true }, NOW)).map((c) => c.name)).toEqual(["Monthly", "Weekly"]);
   });
 

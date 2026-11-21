@@ -21,6 +21,17 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
+// Bits of the browser that jsdom leaves out and the menu and popover components expect.
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
+Element.prototype.scrollIntoView ??= () => {};
+Element.prototype.hasPointerCapture ??= () => false;
+Element.prototype.releasePointerCapture ??= () => {};
+
 afterEach(() => {
   cleanup();
   localStorage.clear();

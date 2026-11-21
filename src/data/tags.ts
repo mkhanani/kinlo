@@ -28,6 +28,8 @@ export async function ensureTag(name: string): Promise<Tag> {
 export async function renameTag(id: string, name: string): Promise<void> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error("A tag needs a name.");
+  const clash = await db().select<{ id: string }>("SELECT id FROM tags WHERE name = $1 AND id <> $2", [trimmed, id]);
+  if (clash.length) throw new Error("There is already a tag with that name.");
   await db().execute("UPDATE tags SET name = $2 WHERE id = $1", [id, trimmed]);
 }
 

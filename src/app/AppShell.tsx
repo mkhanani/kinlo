@@ -5,18 +5,18 @@ import { Sidebar } from "@/components/shell/Sidebar";
 import { AssistantPanel } from "@/components/shell/AssistantPanel";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { HomePage } from "@/pages/Home";
-import { PeoplePage } from "@/pages/People";
+import { ContactFormDialog } from "@/features/people/ContactFormDialog";
+import { PeopleRoutes } from "@/features/people/PeopleRoutes";
 import { PipelinePage } from "@/pages/Pipeline";
 import { RemindersPage } from "@/pages/Reminders";
 import { SettingsPage } from "@/pages/Settings";
 import { pageVariants } from "@/lib/motion";
-import { useSettings, useThemeSync } from "./settings";
+import { useSide } from "./settings";
 import { useShortcuts } from "./useShortcuts";
 
 export function AppShell() {
   const location = useLocation();
-  const { pipelineEnabled } = useSettings();
-  useThemeSync();
+  const side = useSide();
   useShortcuts();
 
   // Key transitions by top-level section so nested routes (e.g. /people/:id) can animate on their own.
@@ -39,8 +39,8 @@ export function AppShell() {
             >
               <Routes location={location}>
                 <Route path="/" element={<HomePage />} />
-                <Route path="/people/*" element={<PeoplePage />} />
-                <Route path="/pipeline" element={pipelineEnabled ? <PipelinePage /> : <Navigate to="/" replace />} />
+                <Route path="/people/*" element={<PeopleRoutes />} />
+                <Route path="/pipeline" element={side === "business" ? <PipelinePage /> : <Navigate to="/" replace />} />
                 <Route path="/reminders" element={<RemindersPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
@@ -51,6 +51,7 @@ export function AppShell() {
         <AssistantPanel />
       </div>
       <CommandPalette />
+      <ContactFormDialog />
     </div>
   );
 }

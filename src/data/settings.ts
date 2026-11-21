@@ -1,4 +1,5 @@
 import { db } from "./driver";
+import type { Side } from "./types";
 
 export type ThemePref = "system" | "light" | "dark";
 export type AiProvider = "anthropic" | "openai" | "google" | "ollama";
@@ -7,9 +8,18 @@ export type AiProvider = "anthropic" | "openai" | "google" | "ollama";
  * Every setting the app stores, with its type. API keys are not settings: they live in
  * the operating system's keychain and never touch this table.
  */
+/** Which sides of kinlo the user has switched on. */
+export type SidesChoice = "personal" | "business" | "both";
+
 export interface Settings {
+  /** False until the welcome setup has been finished. */
+  onboarded: boolean;
+  /** What to call the user in greetings. */
+  userName: string | null;
   theme: ThemePref;
-  pipelineEnabled: boolean;
+  sides: SidesChoice;
+  /** The side on screen. Only matters when `sides` is "both". */
+  activeSide: Side;
   defaultCurrency: string;
   aiProvider: AiProvider | null;
   aiModel: string | null;
@@ -18,8 +28,11 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  onboarded: false,
+  userName: null,
   theme: "system",
-  pipelineEnabled: true,
+  sides: "both",
+  activeSide: "personal",
   defaultCurrency: "USD",
   aiProvider: null,
   aiModel: null,
@@ -48,4 +61,9 @@ export async function saveSetting<K extends keyof Settings>(key: K, value: Setti
     "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
     [key, JSON.stringify(value)],
   );
+}
+
+/** The side on screen right now: the only one switched on, or the one chosen when both are. */
+export function currentSide(settings: Pick<Settings, "sides" | "activeSide">): Side {
+  return settings.sides === "both" ? settings.activeSide : settings.sides;
 }
