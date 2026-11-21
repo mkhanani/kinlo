@@ -20,6 +20,12 @@ export interface Settings {
   sides: SidesChoice;
   /** The side on screen. Only matters when `sides` is "both". */
   activeSide: Side;
+  /** Show a system notification when a reminder is due. */
+  notifications: boolean;
+  /** Keep running in the tray after the window is closed, so reminders can still notify. */
+  runInBackground: boolean;
+  /** The last moment the app was running and watching reminders, as an ISO timestamp. */
+  notifiedThrough: string | null;
   defaultCurrency: string;
   aiProvider: AiProvider | null;
   aiModel: string | null;
@@ -33,6 +39,9 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "system",
   sides: "both",
   activeSide: "personal",
+  notifications: true,
+  runInBackground: true,
+  notifiedThrough: null,
   defaultCurrency: "USD",
   aiProvider: null,
   aiModel: null,

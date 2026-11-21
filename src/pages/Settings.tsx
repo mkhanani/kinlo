@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
+import { getOpenAtLogin, notifyNow, quitApp, setOpenAtLogin } from "@/app/notifications";
 import { useSaveSetting, useSettings } from "@/app/settings";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
 import { Page, PageHeader } from "@/components/ui/Page";
 import { Segmented } from "@/components/ui/Segmented";
+import { Switch } from "@/components/ui/Switch";
 import type { SidesChoice, ThemePref } from "@/data/settings";
+import { isTauri } from "@/lib/platform";
 
 export function SettingsPage() {
   const { theme, sides, userName } = useSettings();
@@ -69,7 +72,72 @@ export function SettingsPage() {
           <Button onClick={() => save("onboarded", false)}>Run again</Button>
         </Row>
       </div>
+
+      {isTauri && <NotificationSettings />}
     </Page>
+  );
+}
+
+/** Reminders can only notify while kinlo is running, so these three settings go together. */
+function NotificationSettings() {
+  const { notifications, runInBackground } = useSettings();
+  const save = useSaveSetting();
+  const [openAtLogin, setOpenAtLoginState] = useState(false);
+  const [tested, setTested] = useState<"sent" | "blocked" | null>(null);
+
+  useEffect(() => {
+    void getOpenAtLogin().then(setOpenAtLoginState).catch(() => {});
+  }, []);
+
+  const toggleLogin = (enabled: boolean) => {
+    setOpenAtLoginState(enabled);
+    setOpenAtLogin(enabled).catch(() => setOpenAtLoginState(!enabled));
+  };
+
+  const test = async () => {
+    const shown = await notifyNow("This is how a reminder looks", "Sent from kinlo's settings.").catch(() => false);
+    setTested(shown ? "sent" : "blocked");
+  };
+
+  return (
+    <>
+      <h2 className="mb-2 mt-8 px-1 text-sm font-medium tracking-normal text-muted">Reminders</h2>
+      <div className="glass divide-y divide-hairline">
+        <Row
+          label="Notifications"
+          hint={
+            tested === "blocked"
+              ? "Your system is blocking notifications from kinlo. Allow them in your system settings."
+              : tested === "sent"
+                ? "Sent. If nothing appeared, check that notifications are allowed for kinlo in your system settings."
+                : "Show a notification on this computer when a reminder is due."
+          }
+        >
+          <div className="flex items-center gap-3">
+            <Button size="sm" onClick={() => void test()}>
+              Send a test
+            </Button>
+            <Switch label="Notifications" checked={notifications} onChange={(on) => save("notifications", on)} />
+          </div>
+        </Row>
+        <Row
+          label="Keep running in the background"
+          hint="Closing the window keeps kinlo in the system tray, so reminders can still reach you. Open kinlo again to bring the window back."
+        >
+          <Switch
+            label="Keep running in the background"
+            checked={runInBackground}
+            onChange={(on) => save("runInBackground", on)}
+          />
+        </Row>
+        <Row label="Open at login" hint="Start kinlo quietly in the tray when you sign in to this computer.">
+          <Switch label="Open at login" checked={openAtLogin} onChange={toggleLogin} />
+        </Row>
+        <Row label="Quit kinlo" hint="Stops kinlo completely. Reminders will not notify you until you open it again.">
+          <Button onClick={() => void quitApp()}>Quit</Button>
+        </Row>
+      </div>
+    </>
   );
 }
 
