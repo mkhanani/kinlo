@@ -265,6 +265,29 @@ function useDealMutation<V, R>(run: (variables: V) => Promise<R>) {
   });
 }
 
+/** Deal counts per stage, for the dialog that edits stages. */
+export function useStageCounts() {
+  return useQuery({ queryKey: [...keys.deals, "by-stage"], queryFn: () => data.countDealsByStage() });
+}
+
+/** Changes to the stages themselves: the board, the forms and the lists all show them. */
+function useStageMutation<V, R>(run: (variables: V) => Promise<R>) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: run,
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.stages });
+      void client.invalidateQueries({ queryKey: keys.deals });
+    },
+  });
+}
+
+export const useCreateStage = () => useStageMutation((name: string) => data.createStage(name));
+export const useRenameStage = () =>
+  useStageMutation(({ id, name }: { id: string; name: string }) => data.renameStage(id, name));
+export const useReorderStages = () => useStageMutation((ids: string[]) => data.reorderStages(ids));
+export const useDeleteStage = () => useStageMutation((id: string) => data.deleteStage(id));
+
 export const useCreateDeal = () => useDealMutation((input: DealInput) => data.createDeal(input));
 
 export const useUpdateDeal = () =>

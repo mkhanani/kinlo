@@ -15,7 +15,7 @@ import {
 import type { CollisionDetection, DragEndEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Columns3, Plus } from "lucide-react";
+import { Columns3, ListOrdered, Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/Page";
@@ -42,6 +42,7 @@ export function PipelinePage() {
   const drop = useDropDeal();
   const openDealForm = useUI((s) => s.openDealForm);
   const openContactForm = useUI((s) => s.openContactForm);
+  const openStages = useUI((s) => s.setStagesOpen);
 
   // Won and Lost show the last 30 days unless asked for everything. Remembered while the app is open.
   const [showAll, setShowAll] = useState<ReadonlySet<string>>(new Set());
@@ -151,9 +152,14 @@ export function PipelinePage() {
         title="Pipeline"
         subtitle={total > 0 ? `${open} open ${open === 1 ? "deal" : "deals"}` : undefined}
         actions={
-          <Button variant="primary" onClick={() => openDealForm()} disabled={businessPeople === 0}>
-            <Plus size={15} strokeWidth={1.5} /> Add deal
-          </Button>
+          <>
+            <Button onClick={() => openStages(true)}>
+              <ListOrdered size={15} strokeWidth={1.5} /> Stages
+            </Button>
+            <Button variant="primary" onClick={() => openDealForm()} disabled={businessPeople === 0}>
+              <Plus size={15} strokeWidth={1.5} /> Add deal
+            </Button>
+          </>
         }
       />
 

@@ -46,6 +46,16 @@ interface UIState {
   openDealForm: (options?: { dealId?: string; contactId?: string; stageId?: string }) => void;
   closeDealForm: () => void;
 
+  /** The "Import people" dialog. */
+  importOpen: boolean;
+  setImportOpen: (open: boolean) => void;
+  /** The list of keyboard shortcuts. */
+  shortcutsOpen: boolean;
+  setShortcutsOpen: (open: boolean) => void;
+  /** The dialog for renaming, adding and reordering pipeline stages. */
+  stagesOpen: boolean;
+  setStagesOpen: (open: boolean) => void;
+
   /** Kept here so the People list is as you left it when you come back from a person. */
   peopleFilter: PeopleFilter;
   setPeopleFilter: (patch: Partial<PeopleFilter>) => void;
@@ -81,6 +91,13 @@ export const useUI = create<UIState>((set, get) => ({
       paletteOpen: false,
     }),
   closeDealForm: () => set({ dealForm: { ...get().dealForm, open: false } }),
+
+  importOpen: false,
+  setImportOpen: (importOpen) => set({ importOpen, ...(importOpen ? { paletteOpen: false } : {}) }),
+  shortcutsOpen: false,
+  setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen, ...(shortcutsOpen ? { paletteOpen: false } : {}) }),
+  stagesOpen: false,
+  setStagesOpen: (stagesOpen) => set({ stagesOpen }),
 
   peopleFilter: EMPTY_PEOPLE_FILTER,
   setPeopleFilter: (patch) => set({ peopleFilter: { ...get().peopleFilter, ...patch } }),

@@ -1,10 +1,12 @@
 import { useCallback, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { importContacts } from "@/data";
 import { Bleed, type BleedSpec } from "@/features/onboarding/Bleed";
 import { Onboarding, type OnboardingResult } from "@/features/onboarding/Onboarding";
 import { AppShell } from "./AppShell";
 import { useBackgroundSetting, useReminderNotifications } from "./notifications";
-import { useSaveSetting, useSettings, useThemeSync } from "./settings";
+import { settingsKey, useSaveSetting, useSettings, useThemeSync } from "./settings";
 
 /**
  * The top of the app: the welcome setup until it has been finished, then the app itself.
@@ -14,6 +16,7 @@ export function Root() {
   const { onboarded } = useSettings();
   const save = useSaveSetting();
   const navigate = useNavigate();
+  const client = useQueryClient();
   useThemeSync();
   // These run for as long as the app does, whatever is on screen.
   useReminderNotifications();
@@ -37,9 +40,15 @@ export function Root() {
     save("sides", result.sides);
     save("activeSide", result.activeSide);
     save("onboarded", true);
+    // People picked from a file during setup go onto the side that was just chosen.
+    if (result.importRows.length) {
+      void importContacts(result.importRows, { side: result.activeSide }).then(() =>
+        client.invalidateQueries({ predicate: (query) => query.queryKey[0] !== settingsKey[0] }),
+      );
+    }
     navigate("/", { replace: true });
     setBleed((current) => (current ? { ...current, phase: "clearing" } : current));
-  }, [save, navigate]);
+  }, [save, navigate, client]);
 
   return (
     <>
