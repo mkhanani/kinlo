@@ -23,6 +23,18 @@ Two values, a **Client ID** and a **Client secret**, saved as secrets in the Git
 2. Search for `Google Calendar API` and open it.
 3. Click **Enable**.
 
+### If Google offers "Create credentials"
+
+After enabling the API, Google may show a **Create credentials** button that opens a wizard. It covers steps 3, 4 and 6 in one go, and it is fine to use:
+
+1. **Credential type:** Google Calendar API, **User data**.
+2. **OAuth consent screen:** app name `kinlo`, your email for support and for developer contact. Leave the logo empty; uploading one triggers a review.
+3. **Scopes:** marked optional, but do it. Add the scope from step 4 below.
+4. **OAuth Client ID:** application type **Desktop app**, name `kinlo desktop`.
+5. **Your credentials:** download the JSON, then **Done**.
+
+Then do step 5 (test users) and step 7 (GitHub secrets). The wizard does neither.
+
 ## 3. Describe the app
 
 This is what people see on Google's sign-in page.
@@ -47,7 +59,7 @@ kinlo asks for one permission only: to make its own calendar and manage the even
    ```
 
 4. Click **Add to table**, then **Update**, then **Save**.
-5. Note which heading Google puts it under: **Non-sensitive**, **Sensitive** or **Restricted**. That decides how much review step 7 needs, so pass it on.
+5. Check which heading Google puts it under. When kinlo was registered in November 2026 it was **Non-sensitive**, which means Google does not review the permission. If it ever shows as Sensitive or Restricted, see "Later" below.
 
 ## 5. Let yourself sign in
 
@@ -87,7 +99,7 @@ Do this only when calendar sync works and is about to be released.
 
 1. In **Audience**, click **Publish app**. The status changes from Testing to In production. Anyone can then sign in, and the seven-day limit ends.
 2. What happens next depends on the heading from step 4:
-   - **Non-sensitive:** nothing more to do.
+   - **Non-sensitive (kinlo's case):** no review of the permission. Google may still ask for a home page and a privacy policy before it shows kinlo's name and logo on the sign-in page. Check what the Branding and Verification centre pages ask for at that point.
    - **Sensitive:** Google asks for verification. Until it is granted, the sign-in page shows an "unverified app" warning and at most 100 people can sign in. Verification is free. It needs a home page and a privacy policy on a web address you own, and a short explanation of why the permission is needed. It usually takes days to a few weeks.
    - **Restricted:** a much heavier review. This would be a reason to reconsider the approach, so say so before going further.
 
