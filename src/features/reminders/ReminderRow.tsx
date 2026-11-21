@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, MoreHorizontal, Repeat } from "lucide-react";
+import { AlarmClock, Check, MoreHorizontal, Repeat } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Menu, MenuItem } from "@/components/ui/Menu";
-import { useCompleteReminder, useDeleteReminder, useReopenReminder } from "@/data/hooks";
+import { Menu, MenuItem, MenuLabel } from "@/components/ui/Menu";
+import { useCompleteReminder, useDeleteReminder, useReopenReminder, useSnoozeReminder } from "@/data/hooks";
 import type { ReminderWithContact } from "@/data/types";
 import { relativeDay } from "@/lib/dates";
 import { useUI } from "@/store/ui";
-import { dueGroup, dueLabel, REPEAT_LABEL } from "./due";
+import { dueGroup, dueLabel, REPEAT_LABEL, snoozeOptions } from "./due";
 
 interface Props {
   reminder: ReminderWithContact;
@@ -25,7 +25,9 @@ export function ReminderRow({ reminder, hidePerson, compact }: Props) {
   const openForm = useUI((s) => s.openReminderForm);
   const [confirming, setConfirming] = useState(false);
 
+  const snooze = useSnoozeReminder();
   const done = !!reminder.done_at;
+  const snoozed = !done && !!reminder.snoozed_from;
   const overdue = !done && dueGroup(reminder.due_at) === "overdue";
   const busy = complete.isPending || reopen.isPending;
 
@@ -48,7 +50,7 @@ export function ReminderRow({ reminder, hidePerson, compact }: Props) {
 
       <div className="min-w-0 flex-1">
         <div className={`truncate text-base ${done ? "text-muted line-through" : ""}`}>{reminder.title}</div>
-        {(!hidePerson && reminder.contact_name) || reminder.repeat_rule ? (
+        {(!hidePerson && reminder.contact_name) || reminder.repeat_rule || snoozed ? (
           <div className="flex items-center gap-2 truncate text-sm text-muted">
             {!hidePerson && reminder.contact_id && reminder.contact_name && (
               <Link to={`/people/${reminder.contact_id}`} className="truncate hover:text-fg hover:underline">
@@ -58,6 +60,11 @@ export function ReminderRow({ reminder, hidePerson, compact }: Props) {
             {reminder.repeat_rule && (
               <span className="inline-flex shrink-0 items-center gap-1 text-subtle">
                 <Repeat size={11} strokeWidth={1.75} /> {REPEAT_LABEL[reminder.repeat_rule]}
+              </span>
+            )}
+            {snoozed && (
+              <span className="inline-flex shrink-0 items-center gap-1 text-subtle">
+                <AlarmClock size={11} strokeWidth={1.75} /> Snoozed
               </span>
             )}
           </div>
@@ -70,6 +77,29 @@ export function ReminderRow({ reminder, hidePerson, compact }: Props) {
       >
         {done ? `Done ${relativeDay(reminder.done_at!)}` : dueLabel(reminder.due_at)}
       </time>
+
+      {!done && (
+        <div className="opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover:opacity-100">
+          <Menu
+            trigger={
+              <button
+                aria-label={`Snooze ${reminder.title}`}
+                title="Snooze"
+                className="flex h-6 w-6 items-center justify-center rounded-[8px] text-muted hover:bg-control hover:text-fg"
+              >
+                <AlarmClock size={14} strokeWidth={1.5} />
+              </button>
+            }
+          >
+            <MenuLabel>Remind me again</MenuLabel>
+            {snoozeOptions().map((option) => (
+              <MenuItem key={option.label} onSelect={() => snooze.mutate({ id: reminder.id, until: option.until })}>
+                {option.label} <span className="text-sm text-subtle">{dueLabel(option.until)}</span>
+              </MenuItem>
+            ))}
+          </Menu>
+        </div>
+      )}
 
       {!compact && (
         <div className="opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover:opacity-100">

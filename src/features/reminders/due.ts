@@ -54,6 +54,26 @@ export function defaultDue(now: Date = new Date()): string {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9, 0).toISOString();
 }
 
+export interface SnoozeOption {
+  label: string;
+  /** When the reminder comes back, as an ISO timestamp. */
+  until: string;
+}
+
+/**
+ * The places a reminder can be put off to, from the moment you ask. "This evening" is
+ * only offered while there is still some afternoon left.
+ */
+export function snoozeOptions(now: Date = new Date()): SnoozeOption[] {
+  const day = (offset: number, hours: number) =>
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset, hours, 0).toISOString();
+  const options: SnoozeOption[] = [{ label: "In an hour", until: new Date(now.getTime() + 3_600_000).toISOString() }];
+  if (now.getHours() < 17) options.push({ label: "This evening", until: day(0, 18) });
+  options.push({ label: "Tomorrow morning", until: day(1, 9) });
+  options.push({ label: "Next week", until: day(7, 9) });
+  return options;
+}
+
 /**
  * The end of the week ahead: the last moment of the seventh day, counting today.
  * Home uses a rolling seven days rather than the calendar week, so on the last day of a

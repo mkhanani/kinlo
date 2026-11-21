@@ -140,7 +140,7 @@ function ThisWeek() {
   return (
     <Card
       icon={Bell}
-      title="Reminders this week"
+      title="Reminders, next 7 days"
       count={reminders.length}
       footer={
         reminders.length > SHOWN ? (
@@ -153,7 +153,7 @@ function ThisWeek() {
       }
     >
       {reminders.length === 0 ? (
-        <Empty>Nothing due this week.</Empty>
+        <Empty>Nothing due in the next 7 days.</Empty>
       ) : (
         <ul className="flex flex-col">
           {reminders.slice(0, SHOWN).map((reminder) => (

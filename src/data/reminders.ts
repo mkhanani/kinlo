@@ -80,7 +80,9 @@ export async function updateReminder(
     2,
   );
   if (!clause) return;
-  await db().execute(`UPDATE reminders SET ${clause} WHERE id = $1`, [id, ...params]);
+  // Choosing a new time by hand ends any snooze: that time is now the real one.
+  const endSnooze = "due_at" in patch ? ", snoozed_from = NULL" : "";
+  await db().execute(`UPDATE reminders SET ${clause}${endSnooze} WHERE id = $1`, [id, ...params]);
   if ("contact_id" in patch) {
     // If it is now about someone who is on only one side, it moves to their side.
     await db().execute(
@@ -123,12 +125,28 @@ export async function completeReminder(id: string, now: string = nowIso()): Prom
   const reminder = await getReminder(id);
   if (!reminder || reminder.done_at) return reminder;
   if (reminder.repeat_rule) {
-    const due = nextDue(reminder.due_at, reminder.repeat_rule, now);
-    await db().execute("UPDATE reminders SET due_at = $2 WHERE id = $1 AND done_at IS NULL", [id, due]);
+    // Count from where it was meant to be, so a snooze does not shift the rhythm.
+    const due = nextDue(reminder.snoozed_from ?? reminder.due_at, reminder.repeat_rule, now);
+    await db().execute("UPDATE reminders SET due_at = $2, snoozed_from = NULL WHERE id = $1 AND done_at IS NULL", [
+      id,
+      due,
+    ]);
   } else {
     await db().execute("UPDATE reminders SET done_at = $2 WHERE id = $1 AND done_at IS NULL", [id, now]);
   }
   return getReminder(id);
+}
+
+/**
+ * Puts an open reminder off until `until`. The original time is kept (once, however many
+ * times it is snoozed) so a repeating reminder can return to its rhythm.
+ */
+export async function snoozeReminder(id: string, until: string): Promise<void> {
+  await db().execute(
+    `UPDATE reminders SET snoozed_from = coalesce(snoozed_from, due_at), due_at = $2
+      WHERE id = $1 AND done_at IS NULL`,
+    [id, until],
+  );
 }
 
 export async function reopenReminder(id: string): Promise<void> {

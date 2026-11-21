@@ -35,7 +35,10 @@ const dataDir =
 const database = join(dataDir, "kinlo.db");
 
 const log = (...parts) => console.log("[smoke]", ...parts);
-const run = (file, args) => execFileSync(file, args, { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" });
+// Every helper call has a time limit, so a system that refuses scripted input fails fast
+// instead of hanging the whole run.
+const run = (file, args) =>
+  execFileSync(file, args, { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", timeout: 20_000 });
 const powershell = (script) => run("powershell", ["-NoProfile", "-NonInteractive", "-Command", script]);
 const osascript = (script) => run("osascript", ["-e", script]);
 
@@ -137,7 +140,12 @@ app.stderr.on("data", (chunk) => (appOutput += chunk));
 app.on("exit", (code, signal) => (exited = { code, signal }));
 
 // The first start is the slowest: the web view starts up and the database is created.
-await sleep(os === "linux" ? 10_000 : 18_000);
+// Wait until the app has made its database (it does that before showing anything), for
+// up to two minutes on a slow machine, then give the first screen a moment to settle.
+const started = Date.now();
+while (!existsSync(database) && exited === null && Date.now() - started < 120_000) await sleep(1000);
+log(`database ${existsSync(database) ? "appeared" : "did not appear"} after ${Math.round((Date.now() - started) / 1000)}s`);
+await sleep(6000);
 const aliveAfterStart = exited === null;
 shot("1-welcome");
 

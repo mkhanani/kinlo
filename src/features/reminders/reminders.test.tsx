@@ -2,16 +2,18 @@ import { describe, expect, it } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import {
   addInteraction,
+  completeReminder,
   createContact,
   createDeal,
   createReminder,
   listReminders,
   listUpcomingBirthdays,
+  snoozeReminder,
   updateReminder,
 } from "@/data";
 import { useTestDatabase } from "@/data/testing";
 import { renderApp } from "@/test/render";
-import { defaultDue, dueGroup, dueLabel, groupByDue, weekAhead } from "./due";
+import { defaultDue, dueGroup, dueLabel, groupByDue, snoozeOptions, weekAhead } from "./due";
 
 useTestDatabase();
 
@@ -240,6 +242,83 @@ describe("Reminders screen", () => {
   });
 });
 
+describe("Snooze", () => {
+  const now = new Date(2026, 5, 17, 15, 0); // Wednesday 3pm
+
+  it("offers sensible times, and this evening only while there is afternoon left", () => {
+    const afternoon = snoozeOptions(now);
+    expect(afternoon.map((o) => o.label)).toEqual(["In an hour", "This evening", "Tomorrow morning", "Next week"]);
+    const at = (label: string) => new Date(afternoon.find((o) => o.label === label)!.until);
+    expect([at("In an hour").getHours(), at("In an hour").getMinutes()]).toEqual([16, 0]);
+    expect([at("This evening").getDate(), at("This evening").getHours()]).toEqual([17, 18]);
+    expect([at("Tomorrow morning").getDate(), at("Tomorrow morning").getHours()]).toEqual([18, 9]);
+    expect([at("Next week").getDate(), at("Next week").getHours()]).toEqual([24, 9]);
+
+    const evening = snoozeOptions(new Date(2026, 5, 17, 19, 30));
+    expect(evening.map((o) => o.label)).toEqual(["In an hour", "Tomorrow morning", "Next week"]);
+  });
+
+  it("puts a reminder off and remembers where it was", async () => {
+    const r = await createReminder({ title: "Call the bank", due_at: at(0, 9) });
+    await snoozeReminder(r.id, at(1, 9));
+    await snoozeReminder(r.id, at(2, 9)); // snoozed again
+    const snoozed = (await listReminders())[0]!;
+    expect(snoozed.due_at).toBe(at(2, 9));
+    // The original time survives being snoozed twice.
+    expect(snoozed.snoozed_from).toBe(at(0, 9));
+
+    // Picking a new time by hand ends the snooze.
+    await updateReminder(r.id, { due_at: at(5, 9) });
+    expect((await listReminders())[0]).toMatchObject({ due_at: at(5, 9), snoozed_from: null });
+  });
+
+  it("does not shift the rhythm of a repeating reminder", async () => {
+    const monday = new Date(2026, 5, 15, 8, 0).toISOString(); // Monday 15 June
+    const r = await createReminder({ title: "Water plants", due_at: monday, repeat_rule: "weekly" });
+    const tuesday = new Date(2026, 5, 16, 8, 0).toISOString();
+    await snoozeReminder(r.id, tuesday);
+
+    // Done on the Tuesday: next time is the following Monday, not the following Tuesday.
+    const next = await completeReminder(r.id, new Date(2026, 5, 16, 9, 0).toISOString());
+    expect(next!.due_at).toBe(new Date(2026, 5, 22, 8, 0).toISOString());
+    expect(next!.snoozed_from).toBeNull();
+  });
+
+  it("snoozes from the row and moves the reminder to its new group", async () => {
+    await createReminder({ title: "Call the bank", due_at: at(-1, 9) });
+    renderApp("/reminders");
+    await screen.findByRole("region", { name: "Overdue" });
+
+    const trigger = screen.getByRole("button", { name: "Snooze Call the bank" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Tomorrow morning/ }));
+
+    const upcoming = await screen.findByRole("region", { name: "Upcoming" });
+    expect(within(upcoming).getByText("Call the bank")).toBeInTheDocument();
+    expect(within(upcoming).getByText("Snoozed")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Overdue" })).not.toBeInTheDocument();
+
+    const saved = (await listReminders())[0]!;
+    const due = new Date(saved.due_at);
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    expect([due.getDate(), due.getHours()]).toEqual([tomorrow.getDate(), 9]);
+  });
+
+  it("can be done from Home too", async () => {
+    await createReminder({ title: "Quick one", due_at: at(0, 9) });
+    renderApp("/");
+    const week = await screen.findByRole("region", { name: "Reminders, next 7 days" });
+    const trigger = await within(week).findByRole("button", { name: "Snooze Quick one" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Next week/ }));
+    // A week away is outside the next seven days, so it leaves the card.
+    expect(await within(week).findByText("Nothing due in the next 7 days.")).toBeInTheDocument();
+  });
+});
+
 describe("Reminders on a person's page", () => {
   it("adds one already about that person, and ticks it off", async () => {
     const ana = await createContact({ name: "Ana Lima" });
@@ -280,7 +359,7 @@ describe("Home", () => {
     const overdue = await screen.findByRole("region", { name: "Due for a catch-up" });
     expect(await within(overdue).findByRole("link", { name: /Ingrid Solberg/ })).toHaveTextContent("9 days overdue");
 
-    const week = screen.getByRole("region", { name: "Reminders this week" });
+    const week = screen.getByRole("region", { name: "Reminders, next 7 days" });
     expect(await within(week).findByText("Overdue thing")).toBeInTheDocument();
     // Seven days counting today: day six is in, day seven is not.
     expect(within(week).getByText("In six days")).toBeInTheDocument();
@@ -297,9 +376,9 @@ describe("Home", () => {
   it("a reminder can be ticked off straight from Home", async () => {
     await createReminder({ title: "Quick one", due_at: at(0) });
     renderApp("/");
-    const week = await screen.findByRole("region", { name: "Reminders this week" });
+    const week = await screen.findByRole("region", { name: "Reminders, next 7 days" });
     fireEvent.click(await within(week).findByRole("checkbox", { name: "Done: Quick one" }));
-    expect(await within(week).findByText("Nothing due this week.")).toBeInTheDocument();
+    expect(await within(week).findByText("Nothing due in the next 7 days.")).toBeInTheDocument();
   });
 
   it("on the business side shows that side's people and the open deals", async () => {
@@ -317,7 +396,7 @@ describe("Home", () => {
     expect(await within(overdue).findByRole("link", { name: /Client Carla/ })).toBeInTheDocument();
     expect(within(overdue).queryByText(/Friend Farid/)).not.toBeInTheDocument();
 
-    const week = screen.getByRole("region", { name: "Reminders this week" });
+    const week = screen.getByRole("region", { name: "Reminders, next 7 days" });
     expect(await within(week).findByText("Send invoice")).toBeInTheDocument();
     expect(within(week).queryByText("Renew passport")).not.toBeInTheDocument();
 
@@ -330,7 +409,7 @@ describe("Home", () => {
   it("has a calm empty state", async () => {
     renderApp("/");
     expect(await screen.findByText("Everyone is up to date.")).toBeInTheDocument();
-    expect(screen.getByText("Nothing due this week.")).toBeInTheDocument();
+    expect(screen.getByText("Nothing due in the next 7 days.")).toBeInTheDocument();
     expect(screen.getByText("No birthdays in the next month.")).toBeInTheDocument();
     expect(screen.getByText("Nobody here yet. Add your first person.")).toBeInTheDocument();
   });

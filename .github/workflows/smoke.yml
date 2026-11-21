@@ -30,11 +30,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: Windows, os: windows-latest }
-          - { name: macOS, os: macos-latest }
-          - { name: Linux, os: ubuntu-22.04 }
+          - { name: Windows, slug: windows, os: windows-latest }
+          - { name: macOS, slug: macos, os: macos-latest }
+          - { name: Linux, slug: linux, os: ubuntu-22.04 }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
+    permissions:
+      # To publish the screenshots branch. Nothing else is written.
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - name: Install Linux dependencies
@@ -69,3 +72,18 @@ jobs:
           path: smoke-out
           if-no-files-found: warn
           retention-days: 14
+      # Also keep the latest screenshots on a branch per system, where they can be
+      # browsed on GitHub without downloading anything. Each run replaces the last.
+      - name: Publish screenshots to a branch
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd smoke-out || exit 0
+          git init -q -b results
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Smoke results: ${{ matrix.name }} at ${GITHUB_SHA::7}"
+          git push -q -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "results:refs/heads/smoke-results/${{ matrix.slug }}"

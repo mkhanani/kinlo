@@ -107,6 +107,8 @@ export interface Reminder {
   repeat_rule: RepeatRule | null;
   /** The side of kinlo this reminder shows on. */
   side: Side;
+  /** When it was originally due, while it is snoozed. Null when it is not snoozed. */
+  snoozed_from: string | null;
   done_at: string | null;
   created_at: string;
 }

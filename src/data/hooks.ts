@@ -266,6 +266,8 @@ export const useUpdateReminder = () =>
   );
 
 export const useCompleteReminder = () => useReminderMutation((id: string) => data.completeReminder(id));
+export const useSnoozeReminder = () =>
+  useReminderMutation(({ id, until }: { id: string; until: string }) => data.snoozeReminder(id, until));
 export const useReopenReminder = () => useReminderMutation((id: string) => data.reopenReminder(id));
 export const useDeleteReminder = () => useReminderMutation((id: string) => data.deleteReminder(id));
 
