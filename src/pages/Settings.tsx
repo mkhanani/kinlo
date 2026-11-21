@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
 import { Monitor, Sun, Moon } from "lucide-react";
 import { Page, PageHeader } from "@/components/ui/Page";
-import { useUI, type ThemePref } from "@/store/ui";
+import { useSaveSetting, useSettings } from "@/app/settings";
+import type { ThemePref } from "@/data/settings";
 
 export function SettingsPage() {
-  const { theme, setTheme, pipelineEnabled, setPipelineEnabled } = useUI();
+  const { theme, pipelineEnabled } = useSettings();
+  const save = useSaveSetting();
   const options: { value: ThemePref; label: string; icon: typeof Sun }[] = [
     { value: "system", label: "System", icon: Monitor },
     { value: "light", label: "Light", icon: Sun },
@@ -20,7 +22,7 @@ export function SettingsPage() {
             {options.map(({ value, label, icon: Icon }) => (
               <button
                 key={value}
-                onClick={() => setTheme(value)}
+                onClick={() => save("theme", value)}
                 className={`flex h-7 items-center gap-1.5 rounded-[8px] px-2.5 text-sm transition-colors duration-200 ${
                   theme === value ? "bg-active text-fg" : "text-muted hover:text-fg"
                 }`}
@@ -31,7 +33,7 @@ export function SettingsPage() {
           </div>
         </Row>
         <Row label="Pipeline" hint="Turn off if you only use kinlo for the people in your life.">
-          <Switch checked={pipelineEnabled} onChange={setPipelineEnabled} label="Show pipeline" />
+          <Switch checked={pipelineEnabled} onChange={(on) => save("pipelineEnabled", on)} label="Show pipeline" />
         </Row>
       </div>
     </Page>
