@@ -25,6 +25,8 @@ kinlo has a personal side and a business side. A person can be on either, or on 
 - `contacts.personal` is 1 when they are part of your personal life.
 - `contacts.business` is NULL when they are not a work contact, otherwise what they are to your work: `lead`, `client`, or `other` (a supplier, a partner, your accountant).
 
+Reminders have a `side` too. One about a person who is on only one side always takes that side. For someone on both, or a reminder about nobody, it is the side it was made on.
+
 Everyone is on at least one side; a trigger refuses anything else. Which sides the user has switched on, and which one is on screen, are the `sides` and `activeSide` settings. The pipeline belongs to the business side.
 
 ### Rules the database enforces

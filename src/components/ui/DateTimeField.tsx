@@ -76,12 +76,25 @@ export function DateTimeField({ value, onChange, label, allowNow, pastOnly }: Pr
     setView({ year: d.getFullYear(), month: d.getMonth() });
   };
 
-  const quick = (daysAgo: number) => {
+  /** Jumps to a day relative to today, keeping the time already chosen. */
+  const quick = (daysFromToday: number) => {
     const base = selected ?? new Date();
     const d = new Date();
-    d.setDate(d.getDate() - daysAgo);
+    d.setDate(d.getDate() + daysFromToday);
     emit(new Date(d.getFullYear(), d.getMonth(), d.getDate(), base.getHours(), base.getMinutes()));
   };
+
+  // Things that happened look back; things to do look ahead.
+  const shortcuts = pastOnly
+    ? [
+        { label: "Today", days: 0 },
+        { label: "Yesterday", days: -1 },
+      ]
+    : [
+        { label: "Today", days: 0 },
+        { label: "Tomorrow", days: 1 },
+        { label: "Next week", days: 7 },
+      ];
 
   const chip = "h-7 rounded-[8px] px-2 text-sm text-muted transition-colors duration-150 hover:bg-control-hover hover:text-fg";
 
@@ -112,12 +125,11 @@ export function DateTimeField({ value, onChange, label, allowNow, pastOnly }: Pr
                 Now
               </button>
             )}
-            <button type="button" className={chip} onClick={() => quick(0)}>
-              Today
-            </button>
-            <button type="button" className={chip} onClick={() => quick(1)}>
-              Yesterday
-            </button>
+            {shortcuts.map((shortcut) => (
+              <button key={shortcut.label} type="button" className={chip} onClick={() => quick(shortcut.days)}>
+                {shortcut.label}
+              </button>
+            ))}
           </div>
 
           <div className="mb-1 flex items-center justify-between">

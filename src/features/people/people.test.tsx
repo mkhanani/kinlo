@@ -243,7 +243,7 @@ describe("A person's page", () => {
   it("saves notes when you click away", async () => {
     const ana = await createContact({ name: "Ana Lima" });
     renderApp(`/people/${ana.id}`);
-    const notes = await screen.findByLabelText("Notes");
+    const notes = await screen.findByRole("textbox", { name: "Notes" });
     type(notes, "Prefers calls in the morning");
     fireEvent.blur(notes);
     await waitFor(async () => expect((await getContact(ana.id))!.notes).toBe("Prefers calls in the morning"));

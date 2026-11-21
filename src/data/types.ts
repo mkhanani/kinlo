@@ -105,6 +105,8 @@ export interface Reminder {
   title: string;
   due_at: string;
   repeat_rule: RepeatRule | null;
+  /** The side of kinlo this reminder shows on. */
+  side: Side;
   done_at: string | null;
   created_at: string;
 }
@@ -118,6 +120,21 @@ export interface ReminderInput {
   due_at: string;
   contact_id?: string | null;
   repeat_rule?: RepeatRule | null;
+  /**
+   * The side it is being made on. Ignored when it is about a person who is on only one
+   * side: then it takes theirs. Defaults to personal.
+   */
+  side?: Side;
+}
+
+export interface UpcomingBirthday {
+  contact: Contact;
+  /** The date of the next birthday, YYYY-MM-DD, in local time. */
+  date: string;
+  /** 0 means today. */
+  days_until: number;
+  /** The age they turn, when the year of birth is known. */
+  turning: number | null;
 }
 
 export interface Stage {
