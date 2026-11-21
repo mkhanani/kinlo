@@ -10,6 +10,8 @@ export default defineConfig({
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
+  // The WebAssembly SQLite used for browser previews loads its own .wasm file.
+  optimizeDeps: { exclude: ["@sqlite.org/sqlite-wasm"] },
   // Tauri expects a fixed port and should not have its Rust errors hidden.
   clearScreen: false,
   server: {

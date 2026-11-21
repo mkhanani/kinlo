@@ -1,4 +1,5 @@
 mod channel;
+mod db;
 mod window;
 
 use channel::Channel;
@@ -19,6 +20,11 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(channel_plugin)
+        .plugin(
+            tauri_plugin_sql::Builder::default()
+                .add_migrations(db::DB_URL, db::migrations())
+                .build(),
+        )
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
         .setup(move |app| {

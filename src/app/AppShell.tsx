@@ -10,12 +10,13 @@ import { PipelinePage } from "@/pages/Pipeline";
 import { RemindersPage } from "@/pages/Reminders";
 import { SettingsPage } from "@/pages/Settings";
 import { pageVariants } from "@/lib/motion";
-import { useUI } from "@/store/ui";
+import { useSettings, useThemeSync } from "./settings";
 import { useShortcuts } from "./useShortcuts";
 
 export function AppShell() {
   const location = useLocation();
-  const pipelineEnabled = useUI((s) => s.pipelineEnabled);
+  const { pipelineEnabled } = useSettings();
+  useThemeSync();
   useShortcuts();
 
   // Key transitions by top-level section so nested routes (e.g. /people/:id) can animate on their own.
