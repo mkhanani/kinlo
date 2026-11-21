@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { DEFAULT_SETTINGS, loadSettings, saveSetting, type Settings } from "@/data/settings";
+import { currentSide, DEFAULT_SETTINGS, loadSettings, saveSetting, type Settings } from "@/data/settings";
+import type { Side } from "@/data/types";
 import { applyTheme, followSystemTheme } from "@/lib/theme";
 
 export const settingsKey = ["settings"] as const;
@@ -12,6 +13,11 @@ type Change = { [K in keyof Settings]: { key: K; value: Settings[K] } }[keyof Se
 export function useSettings(): Settings {
   const { data } = useQuery({ queryKey: settingsKey, queryFn: loadSettings });
   return data ?? DEFAULT_SETTINGS;
+}
+
+/** The side of kinlo on screen: personal or business. */
+export function useSide(): Side {
+  return currentSide(useSettings());
 }
 
 /** Saves one setting. The UI updates at once and rolls back if the write fails. */
@@ -29,7 +35,11 @@ export function useSaveSetting() {
       if (context?.previous) client.setQueryData(settingsKey, context.previous);
     },
   });
-  return <K extends keyof Settings>(key: K, value: Settings[K]) => mutation.mutate({ key, value } as Change);
+  const { mutate } = mutation;
+  return useCallback(
+    <K extends keyof Settings>(key: K, value: Settings[K]) => mutate({ key, value } as Change),
+    [mutate],
+  );
 }
 
 /** Keeps the document's theme in step with the saved preference and the OS. */

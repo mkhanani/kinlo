@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { addMessage, createThread, deleteThread, listMessages, listThreads } from "./ai";
 import { db } from "./driver";
-import { DEFAULT_SETTINGS, loadSettings, saveSetting } from "./settings";
+import { currentSide, DEFAULT_SETTINGS, loadSettings, saveSetting } from "./settings";
 import { useTestDatabase } from "./testing";
 
 useTestDatabase();
@@ -13,9 +13,16 @@ describe("settings", () => {
 
   it("save and load, overwriting earlier values", async () => {
     await saveSetting("theme", "dark");
-    await saveSetting("pipelineEnabled", false);
+    await saveSetting("sides", "business");
     await saveSetting("theme", "light");
-    expect(await loadSettings()).toEqual({ ...DEFAULT_SETTINGS, theme: "light", pipelineEnabled: false });
+    await saveSetting("userName", "Mustafa");
+    expect(await loadSettings()).toEqual({ ...DEFAULT_SETTINGS, theme: "light", sides: "business", userName: "Mustafa" });
+  });
+
+  it("work out the side on screen", () => {
+    expect(currentSide({ sides: "personal", activeSide: "business" })).toBe("personal");
+    expect(currentSide({ sides: "business", activeSide: "personal" })).toBe("business");
+    expect(currentSide({ sides: "both", activeSide: "business" })).toBe("business");
   });
 
   it("ignore keys the app does not know", async () => {

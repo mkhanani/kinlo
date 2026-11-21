@@ -1,0 +1,11 @@
+
+  VITE v8.3.8  ready in 361 ms
+
+  ➜  Local:   http://localhost:1420/
+1:24:58 AM [vite] (client) dependencies optimized: @radix-ui/react-dropdown-menu, @tauri-apps/plugin-opener
+1:24:58 AM [vite] (client) optimized dependencies changed. reloading
+1:25:22 AM [vite] (client) hmr update /src/styles/index.css
+1:25:22 AM [vite] (client) hmr update /src/styles/index.css, /src/features/people/ContactFormDialog.tsx
+1:25:22 AM [vite] (client) hmr update /src/styles/index.css, /src/components/ui/Segmented.tsx
+1:26:08 AM [vite] (client) hmr update /src/styles/index.css
+1:29:54 AM [vite] (client) hmr update /src/styles/index.css, /src/features/people/ContactFormDialog.tsx

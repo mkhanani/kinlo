@@ -1,8 +1,9 @@
 import { db, type SqlValue } from "./driver";
-import type { Contact, ContactFilter, ContactInput, ContactPatch, LabeledValue, OverdueContact, Tag } from "./types";
+import type { Contact, ContactFilter, ContactInput, ContactPatch, LabeledValue, OverdueContact, Side, Tag } from "./types";
 import { buildSet, newId, nowIso, parseJsonArray, text, toFtsQuery } from "./util";
 
-interface ContactRow extends Omit<Contact, "emails" | "phones" | "socials" | "archived" | "tags"> {
+interface ContactRow extends Omit<Contact, "emails" | "phones" | "socials" | "archived" | "personal" | "tags"> {
+  personal: number;
   emails: string;
   phones: string;
   socials: string;
@@ -23,6 +24,20 @@ const SELECT = `
 const daysOverdue = (now: string) =>
   `(CAST(julianday(${now}) - julianday(coalesce(c.last_contacted_at, c.created_at)) AS INTEGER) - c.keep_in_touch_days)`;
 
+/**
+ * The same calculation as the SQL above, for a contact already in memory.
+ * Returns 0 when the person is not overdue or has no keep-in-touch interval.
+ */
+export function overdueDays(
+  contact: Pick<Contact, "keep_in_touch_days" | "last_contacted_at" | "created_at" | "archived">,
+  now: string = nowIso(),
+): number {
+  if (contact.keep_in_touch_days == null || contact.archived) return 0;
+  const since = new Date(contact.last_contacted_at ?? contact.created_at).getTime();
+  const elapsed = Math.trunc((new Date(now).getTime() - since) / 86_400_000);
+  return Math.max(0, elapsed - contact.keep_in_touch_days);
+}
+
 function toContact(row: ContactRow): Contact {
   const { tags_json, days_overdue: _days, ...rest } = row;
   return {
@@ -31,9 +46,12 @@ function toContact(row: ContactRow): Contact {
     phones: parseJsonArray<LabeledValue>(row.phones),
     socials: parseJsonArray<LabeledValue>(row.socials),
     archived: row.archived === 1,
+    personal: row.personal === 1,
     tags: parseJsonArray<Tag>(tags_json),
   };
 }
+
+const NEEDS_A_SIDE = "Choose Personal, Business, or both.";
 
 function cleanList(list: LabeledValue[] | null | undefined): string {
   const cleaned = (list ?? [])
@@ -48,7 +66,9 @@ export async function listContacts(filter: ContactFilter = {}, now: string = now
   const add = (value: SqlValue) => `$${params.push(value)}`;
 
   if (!filter.includeArchived) where.push("c.archived = 0");
-  if (filter.kind) where.push(`c.kind = ${add(filter.kind)}`);
+  if (filter.side === "personal") where.push("c.personal = 1");
+  if (filter.side === "business") where.push("c.business IS NOT NULL");
+  if (filter.business) where.push(`c.business = ${add(filter.business)}`);
   if (filter.tagId) {
     where.push(`EXISTS (SELECT 1 FROM contact_tags ct WHERE ct.contact_id = c.id AND ct.tag_id = ${add(filter.tagId)})`);
   }
@@ -76,13 +96,15 @@ export async function getContact(id: string): Promise<Contact | null> {
 }
 
 /** People whose keep-in-touch interval has passed, most overdue first. */
-export async function listOverdueContacts(now: string = nowIso()): Promise<OverdueContact[]> {
+export async function listOverdueContacts(now: string = nowIso(), side?: Side): Promise<OverdueContact[]> {
+  const onSide = side === "personal" ? "AND c.personal = 1" : side === "business" ? "AND c.business IS NOT NULL" : "";
   const rows = await db().select<ContactRow>(
     `${SELECT}, ${daysOverdue("$1")} AS days_overdue
        FROM contacts c
       WHERE c.archived = 0
         AND c.keep_in_touch_days IS NOT NULL
         AND ${daysOverdue("$1")} > 0
+        ${onSide}
       ORDER BY days_overdue DESC, c.name COLLATE NOCASE`,
     [now],
   );
@@ -92,18 +114,23 @@ export async function listOverdueContacts(now: string = nowIso()): Promise<Overd
 export async function createContact(input: ContactInput): Promise<Contact> {
   const name = input.name.trim();
   if (!name) throw new Error("A person needs a name.");
+  // Someone added without saying which side goes on the personal one.
+  const business = input.business ?? null;
+  const personal = input.personal ?? business === null;
+  if (!personal && !business) throw new Error(NEEDS_A_SIDE);
   const id = newId();
   const now = nowIso();
   await db().execute(
-    `INSERT INTO contacts (id, name, nickname, kind, company, role, emails, phones, socials, location,
-                           birthday, how_we_met, notes, keep_in_touch_days, last_contacted_at,
-                           avatar_path, archived, created_at, updated_at)
+    `INSERT INTO contacts (id, name, nickname, personal, business, company, role, emails, phones, socials,
+                           location, birthday, how_we_met, notes, keep_in_touch_days, last_contacted_at,
+                           archived, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $18)`,
     [
       id,
       name,
       text(input.nickname),
-      input.kind ?? "personal",
+      personal ? 1 : 0,
+      business,
       text(input.company),
       text(input.role),
       cleanList(input.emails),
@@ -115,7 +142,6 @@ export async function createContact(input: ContactInput): Promise<Contact> {
       text(input.notes),
       input.keep_in_touch_days ?? null,
       input.last_contacted_at ?? null,
-      text(input.avatar_path),
       input.archived ? 1 : 0,
       now,
     ],
@@ -130,7 +156,8 @@ export async function updateContact(id: string, patch: ContactPatch): Promise<Co
     {
       name: (v) => (v ?? "").trim(),
       nickname: text,
-      kind: (v) => v ?? "personal",
+      personal: (v) => (v ? 1 : 0),
+      business: (v) => v,
       company: text,
       role: text,
       emails: cleanList,
@@ -142,13 +169,18 @@ export async function updateContact(id: string, patch: ContactPatch): Promise<Co
       notes: text,
       keep_in_touch_days: (v) => v,
       last_contacted_at: (v) => v,
-      avatar_path: text,
       archived: (v) => (v ? 1 : 0),
     },
     3,
   );
   if (clause) {
-    await db().execute(`UPDATE contacts SET ${clause}, updated_at = $2 WHERE id = $1`, [id, nowIso(), ...params]);
+    try {
+      await db().execute(`UPDATE contacts SET ${clause}, updated_at = $2 WHERE id = $1`, [id, nowIso(), ...params]);
+    } catch (cause) {
+      // The schema refuses to leave anyone without a side. Say so in plain words.
+      if (String(cause).includes("has to be on the personal side")) throw new Error(NEEDS_A_SIDE);
+      throw cause;
+    }
   }
   const contact = await getContact(id);
   if (!contact) throw new Error("That person no longer exists.");
@@ -162,21 +194,24 @@ export async function deleteContact(id: string): Promise<void> {
   await db().execute("DELETE FROM contacts WHERE id = $1", [id]);
 }
 
-export async function countContacts(): Promise<number> {
-  const rows = await db().select<{ n: number }>("SELECT count(*) AS n FROM contacts WHERE archived = 0");
+/** How many people there are, not counting archived ones. Pass a side to count only that side. */
+export async function countContacts(side?: Side): Promise<number> {
+  const onSide = side === "personal" ? "AND personal = 1" : side === "business" ? "AND business IS NOT NULL" : "";
+  const rows = await db().select<{ n: number }>(`SELECT count(*) AS n FROM contacts WHERE archived = 0 ${onSide}`);
   return rows[0]?.n ?? 0;
 }
 
 /** For the command palette: best matches first, with a short excerpt of what matched. */
-export async function searchContacts(input: string, limit = 20) {
+export async function searchContacts(input: string, limit = 20, side?: Side) {
   const query = toFtsQuery(input);
   if (!query) return [];
+  const onSide = side === "personal" ? "AND c.personal = 1" : side === "business" ? "AND c.business IS NOT NULL" : "";
   const rows = await db().select<ContactRow & { excerpt: string }>(
     `${SELECT},
             snippet(search, -1, '[', ']', '…', 12) AS excerpt
        FROM search
        JOIN contacts c ON c.id = search.contact_id
-      WHERE search MATCH $1 AND c.archived = 0
+      WHERE search MATCH $1 AND c.archived = 0 ${onSide}
       ORDER BY bm25(search, 0, 10.0, 8.0, 4.0, 2.0, 1.0, 1.0)
       LIMIT $2`,
     [query, limit],
