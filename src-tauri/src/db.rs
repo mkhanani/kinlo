@@ -304,4 +304,81 @@ mod tests {
             .await;
         assert!(sideless.is_err());
     }
+
+    /// The pipeline board's two less ordinary statements, in the SQLite the app ships
+    /// with: renumbering a column (UPDATE ... FROM with a window function) and moving a
+    /// deal to the bottom of another stage. The same text lives in `src/data/deals.ts`.
+    #[tokio::test]
+    async fn the_pipeline_statements_work_in_the_bundled_sqlite() {
+        let pool = migrated().await;
+        pool.execute(
+            "INSERT INTO contacts (id, name, business, created_at, updated_at)
+             VALUES ('c', 'Carla', 'client', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+        )
+        .await
+        .unwrap();
+        // Three deals squeezed into a tiny gap, in the order a, b, c.
+        for (id, position) in [("a", 1.0_f64), ("b", 1.000_000_000_5), ("c", 1.000_000_001)] {
+            sqlx::query(
+                "INSERT INTO deals (id, contact_id, title, stage_id, position, created_at, updated_at)
+                 VALUES ($1, 'c', $1, 'stage-lead', $2, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+            )
+            .bind(id)
+            .bind(position)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        sqlx::query(
+            "UPDATE deals
+                SET position = ranked.place
+               FROM (SELECT id, row_number() OVER (ORDER BY position, created_at, id) AS place
+                       FROM deals WHERE stage_id = $1) AS ranked
+              WHERE deals.id = ranked.id",
+        )
+        .bind("stage-lead")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let rows = sqlx::query("SELECT id, position FROM deals ORDER BY position")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        let order: Vec<(String, f64)> = rows
+            .iter()
+            .map(|r| (r.get("id"), r.get("position")))
+            .collect();
+        assert_eq!(
+            order,
+            [("a".into(), 1.0), ("b".into(), 2.0), ("c".into(), 3.0)]
+        );
+
+        // Move "a" to Won: it goes to the bottom there and is closed by the trigger.
+        sqlx::query(
+            "UPDATE deals
+                SET stage_id = $2,
+                    position = (SELECT coalesce(max(position), 0) + 1 FROM deals WHERE stage_id = $2 AND id <> $1),
+                    updated_at = $3
+              WHERE id = $1 AND stage_id <> $2",
+        )
+        .bind("a")
+        .bind("stage-won")
+        .bind("2026-03-03T00:00:00.000Z")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let moved = sqlx::query("SELECT stage_id, position, closed_at FROM deals WHERE id = 'a'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(moved.get::<String, _>("stage_id"), "stage-won");
+        assert_eq!(moved.get::<f64, _>("position"), 1.0);
+        assert_eq!(
+            moved.get::<Option<String>, _>("closed_at").as_deref(),
+            Some("2026-03-03T00:00:00.000Z")
+        );
+    }
 }

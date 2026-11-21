@@ -444,6 +444,23 @@ describe("Command palette", () => {
     expect(zoe.id).toBeTruthy();
   });
 
+  it("typing fast and pressing Enter at once still opens the person you typed, not an earlier match", async () => {
+    await createContact({ name: "Aaron Abbott" });
+    await createContact({ name: "Priya Raman" });
+    renderApp("/");
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    const input = await screen.findByRole("combobox");
+
+    // Let the list show Aaron first, then change the search and press Enter straight away.
+    type(input, "aaron");
+    await screen.findByRole("option", { name: /Aaron Abbott/ });
+    type(input, "priya");
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(await screen.findByRole("heading", { name: "Priya Raman" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Aaron Abbott" })).not.toBeInTheDocument();
+  });
+
   it("jumps to pages and starts adding a person", async () => {
     renderApp("/");
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });

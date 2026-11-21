@@ -12,22 +12,37 @@ interface Props {
   allowNow?: boolean;
   /** Days after today cannot be picked. For things that have already happened. */
   pastOnly?: boolean;
+  /**
+   * A day with no time of day. The value is then YYYY-MM-DD, and null means no date,
+   * which can be chosen from the picker.
+   */
+  dateOnly?: boolean;
 }
 
-function describe(value: string | null): string {
-  if (!value) return "Now";
-  const days = calendarDaysBetween(new Date(value), new Date());
-  const day = days === 0 ? "Today" : days === 1 ? "Yesterday" : days === -1 ? "Tomorrow" : formatDate(value);
-  return `${day}, ${formatTime(value)}`;
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** A plain date (YYYY-MM-DD) is read as noon local time, so no time zone can shift the day. */
+function toDate(value: string, dateOnly?: boolean): Date {
+  if (!dateOnly) return new Date(value);
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(y!, m! - 1, d!, 12);
+}
+
+function describe(value: string | null, dateOnly?: boolean): string {
+  if (!value) return dateOnly ? "No date" : "Now";
+  const date = toDate(value, dateOnly);
+  const days = calendarDaysBetween(date, new Date());
+  const day = days === 0 ? "Today" : days === 1 ? "Yesterday" : days === -1 ? "Tomorrow" : formatDate(date.toISOString());
+  return dateOnly ? day : `${day}, ${formatTime(value)}`;
 }
 
 /**
  * A date and time picker drawn by kinlo, so it looks and behaves the same on Windows,
  * macOS and Linux. The built-in browser control differs on each.
  */
-export function DateTimeField({ value, onChange, label, allowNow, pastOnly }: Props) {
+export function DateTimeField({ value, onChange, label, allowNow, pastOnly, dateOnly }: Props) {
   const [open, setOpen] = useState(false);
-  const selected = useMemo(() => (value ? new Date(value) : null), [value]);
+  const selected = useMemo(() => (value ? toDate(value, dateOnly) : null), [value, dateOnly]);
   const [view, setView] = useState(() => {
     const d = selected ?? new Date();
     return { year: d.getFullYear(), month: d.getMonth() };
@@ -51,6 +66,12 @@ export function DateTimeField({ value, onChange, label, allowNow, pastOnly }: Pr
   const monthName = new Date(view.year, view.month, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
   const emit = (date: Date) => {
+    if (dateOnly) {
+      // Picking a day is the whole choice, so the picker closes.
+      onChange(`${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`);
+      setOpen(false);
+      return;
+    }
     // Something that already happened cannot be later than this moment.
     const capped = pastOnly && date.getTime() > Date.now() ? new Date() : date;
     onChange(capped.toISOString());
@@ -85,12 +106,17 @@ export function DateTimeField({ value, onChange, label, allowNow, pastOnly }: Pr
   };
 
   // Things that happened look back; things to do look ahead.
-  const shortcuts = pastOnly
+  const shortcuts = dateOnly
     ? [
-        { label: "Today", days: 0 },
-        { label: "Yesterday", days: -1 },
+        { label: "In a week", days: 7 },
+        { label: "In a month", days: 30 },
       ]
-    : [
+    : pastOnly
+      ? [
+          { label: "Today", days: 0 },
+          { label: "Yesterday", days: -1 },
+        ]
+      : [
         { label: "Today", days: 0 },
         { label: "Tomorrow", days: 1 },
         { label: "Next week", days: 7 },
@@ -103,11 +129,11 @@ export function DateTimeField({ value, onChange, label, allowNow, pastOnly }: Pr
       <Popover.Trigger asChild>
         <button
           type="button"
-          aria-label={`${label}: ${describe(value)}`}
-          className="control inline-flex h-8 items-center gap-2 px-2.5 text-sm text-fg"
+          aria-label={`${label}: ${describe(value, dateOnly)}`}
+          className={`control inline-flex h-8 items-center gap-2 px-2.5 text-sm ${value || !dateOnly ? "text-fg" : "text-subtle"}`}
         >
           <CalendarDays size={14} strokeWidth={1.5} className="text-muted" />
-          {describe(value)}
+          {describe(value, dateOnly)}
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -123,6 +149,18 @@ export function DateTimeField({ value, onChange, label, allowNow, pastOnly }: Pr
                 }}
               >
                 Now
+              </button>
+            )}
+            {dateOnly && (
+              <button
+                type="button"
+                className={`${chip} ${value === null ? "bg-active !text-fg" : ""}`}
+                onClick={() => {
+                  onChange(null);
+                  setOpen(false);
+                }}
+              >
+                No date
               </button>
             )}
             {shortcuts.map((shortcut) => (
@@ -175,7 +213,11 @@ export function DateTimeField({ value, onChange, label, allowNow, pastOnly }: Pr
             })}
           </div>
 
-          <label className="mt-2 flex items-center justify-between gap-3 border-t border-hairline pt-2.5 text-sm text-muted">
+          <label
+            className={`mt-2 items-center justify-between gap-3 border-t border-hairline pt-2.5 text-sm text-muted ${
+              dateOnly ? "hidden" : "flex"
+            }`}
+          >
             Time
             <input
               value={time}
