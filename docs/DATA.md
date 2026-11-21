@@ -13,7 +13,7 @@ The schema is the numbered SQL files in `src-tauri/migrations/`. They are the so
 | `tags`, `contact_tags` | Tags and who has them. Tag names are case-insensitive. |
 | `interactions` | Calls, messages, meetings, emails and notes on a contact's timeline. |
 | `reminders` | Things to do, optionally about a contact, optionally repeating. |
-| `stages`, `deals` | The pipeline. Seeded with Lead, Talking, Proposal, Won, Lost. |
+| `stages`, `deals` | The pipeline. Seeded with Lead, Talking, Proposal, Won, Lost; the first three can be changed. |
 | `ai_threads`, `ai_messages` | Assistant conversations. |
 | `settings` | Key and JSON value. Never API keys: those live in the OS keychain. |
 | `search` | FTS5 index over names, company, role, notes and interaction summaries. |
@@ -44,6 +44,26 @@ These are triggers, so they hold no matter what writes to the database (the UI, 
 - Photos are stored in the database (`avatars`) instead of as a file path, so they travel with the one data file.
 - `stages` has an `outcome` column, so the app knows which stages close a deal.
 - Ids are random UUIDs stored as text.
+
+## Getting data out and in
+
+Settings has a "Your data" section. It shows where `kinlo.db` is, with a button that opens the folder.
+
+| | What it does |
+|---|---|
+| Export everything | One JSON file holding every table, row for row (`exportAll` in `src/data/transfer.ts`). API keys are not in it, because they are not in the database. |
+| Export people | A CSV with one row per person, archived people included. It opens in any spreadsheet or address book. Cells that a spreadsheet would run as a formula are written as plain text. |
+| Import people | Reads a CSV from Google Contacts, Outlook, most address books, or kinlo itself. It shows what it found before adding anyone. |
+
+Import only ever adds. Someone is treated as already in kinlo when the name is the same, unless both have email addresses and none match, which means two people who share a name. Those rows are left out and the existing person is not touched; details the file has for them are not merged in. Rows without a name are skipped. A birthday is only read when the date can mean one thing: `03/04/1990` could be March or April, so it is left out rather than guessed.
+
+The JSON export is a copy for safekeeping and for moving to other tools; this version cannot read it back in. The complete backup is the database file itself: close kinlo, copy `kinlo.db`, and put it back in the same folder to restore.
+
+In the app, the system's own Save and Open dialogs choose the file (`src-tauri/src/files.rs`). The web view hands over text and a suggested name, or receives text; it never names a path.
+
+## Pipeline stages
+
+The open stages are the user's to change from the Pipeline page: rename, add (up to eight), reorder and remove. A stage has to be empty before it can be removed, so a deal is never moved or lost without the user doing it, and one open stage always remains. Won and Lost are fixed, because closing a deal depends on them.
 
 ## Changing the schema
 

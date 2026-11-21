@@ -9,6 +9,8 @@ import {
   BellPlus,
   CirclePlus,
   Columns3,
+  FileUp,
+  Keyboard,
   House,
   Search,
   Settings,
@@ -97,6 +99,8 @@ function PaletteBody({ close }: { close: () => void }) {
   const openContactForm = useUI((s) => s.openContactForm);
   const openReminderForm = useUI((s) => s.openReminderForm);
   const openDealForm = useUI((s) => s.openDealForm);
+  const openImport = useUI((s) => s.setImportOpen);
+  const openShortcuts = useUI((s) => s.setShortcutsOpen);
   const { sides } = useSettings();
   const side = useSide();
   const save = useSaveSetting();
@@ -129,6 +133,14 @@ function PaletteBody({ close }: { close: () => void }) {
       ...(side === "business"
         ? [{ id: "add-deal", group: "Actions" as const, label: "Add deal", icon: icon(CirclePlus), run: () => openDealForm() }]
         : []),
+      { id: "import-people", group: "Actions", label: "Import people", icon: icon(FileUp), run: () => openImport(true) },
+      {
+        id: "shortcuts",
+        group: "Actions",
+        label: "Keyboard shortcuts",
+        icon: icon(Keyboard),
+        run: () => openShortcuts(true),
+      },
       ...(sides === "both"
         ? [
             {
@@ -189,6 +201,8 @@ function PaletteBody({ close }: { close: () => void }) {
     openContactForm,
     openReminderForm,
     openDealForm,
+    openImport,
+    openShortcuts,
     assistantReady,
   ]);
 

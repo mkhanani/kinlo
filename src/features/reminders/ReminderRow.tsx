@@ -31,6 +31,15 @@ export function ReminderRow({ reminder, hidePerson, compact }: Props) {
   const overdue = !done && dueGroup(reminder.due_at) === "overdue";
   const busy = complete.isPending || reopen.isPending;
 
+  const when = (
+    <time
+      dateTime={done ? reminder.done_at! : reminder.due_at}
+      className={`shrink-0 text-sm ${overdue ? "font-medium text-fg" : "text-muted"}`}
+    >
+      {done ? `Done ${relativeDay(reminder.done_at!)}` : dueLabel(reminder.due_at)}
+    </time>
+  );
+
   return (
     <div className={`group flex items-center gap-3 ${compact ? "py-1.5" : "px-4 py-2.5"}`}>
       <button
@@ -50,8 +59,10 @@ export function ReminderRow({ reminder, hidePerson, compact }: Props) {
 
       <div className="min-w-0 flex-1">
         <div className={`truncate text-base ${done ? "text-muted line-through" : ""}`}>{reminder.title}</div>
-        {(!hidePerson && reminder.contact_name) || reminder.repeat_rule || snoozed ? (
+        {compact || (!hidePerson && reminder.contact_name) || reminder.repeat_rule || snoozed ? (
           <div className="flex items-center gap-2 truncate text-sm text-muted">
+            {/* In a narrow card the time goes under the title, so the title keeps its room. */}
+            {compact && when}
             {!hidePerson && reminder.contact_id && reminder.contact_name && (
               <Link to={`/people/${reminder.contact_id}`} className="truncate hover:text-fg hover:underline">
                 {reminder.contact_name}
@@ -71,12 +82,7 @@ export function ReminderRow({ reminder, hidePerson, compact }: Props) {
         ) : null}
       </div>
 
-      <time
-        dateTime={done ? reminder.done_at! : reminder.due_at}
-        className={`shrink-0 text-sm ${overdue ? "font-medium text-fg" : "text-muted"}`}
-      >
-        {done ? `Done ${relativeDay(reminder.done_at!)}` : dueLabel(reminder.due_at)}
-      </time>
+      {!compact && when}
 
       {!done && (
         <div className="opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover:opacity-100">

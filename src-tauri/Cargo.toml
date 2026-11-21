@@ -29,6 +29,8 @@ tauri-plugin-single-instance = "2.5.5"
 tauri-plugin-http = "2.9.0"
 # API keys go in the operating system's keychain. Nowhere else.
 keyring = "4.2.0"
+# The system's own "Save as" and "Open" dialogs, for export and import.
+tauri-plugin-dialog = "2.8.4"
 
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
 window-vibrancy = "0.8.1"

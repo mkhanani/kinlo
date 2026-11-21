@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { getKey } from "@/ai/keys";
-import { loadSettings } from "@/data";
+import { countContacts, loadSettings } from "@/data";
 import { db } from "@/data/driver";
 import { useTestDatabase } from "@/data/testing";
 import { renderApp } from "@/test/render";
@@ -39,6 +39,10 @@ async function reachSides(name = "Mustafa") {
   // The assistant is optional: Enter skips it.
   await question("Would you like an assistant?");
   expect(screen.getByRole("button", { name: /Skip/ })).toBeInTheDocument();
+  enter();
+
+  // So is bringing contacts in from a file.
+  await question("Bring your people with you?");
   enter();
 
   await question("What will you use kinlo for?");
@@ -105,11 +109,48 @@ describe("Welcome setup", () => {
     expect(screen.getByRole("radio", { name: /Anthropic/ })).toBeChecked();
     fireEvent.keyDown(key, { key: "Enter" });
 
-    await question("What will you use kinlo for?");
+    await question("Bring your people with you?");
     await waitFor(async () => expect(await getKey("anthropic")).toBe("sk-ant-onboarding"));
     expect(await loadSettings()).toMatchObject({ aiProvider: "anthropic", aiModel: null });
     const stored = await db().select<{ value: string }>("SELECT value FROM settings");
     expect(JSON.stringify(stored)).not.toContain("sk-ant-onboarding");
+  });
+
+  it("adds people from a file once a side has been chosen", async () => {
+    const file = new File(["Name,Email\nAna Lima,ana@example.com\nBo Chen,\n"], "contacts.csv", { type: "text/csv" });
+    // Stand in for the file picker: hand over the file as soon as it is asked for.
+    const realCreate = document.createElement.bind(document);
+    const spy = vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+      const element = realCreate(tag);
+      if (tag === "input") {
+        (element as HTMLInputElement).click = () => {
+          Object.defineProperty(element, "files", { value: [file] });
+          element.dispatchEvent(new Event("change"));
+        };
+      }
+      return element;
+    });
+
+    renderApp("/", { onboarded: false });
+    fireEvent.click(await screen.findByRole("button", { name: "Get started" }));
+    fireEvent.keyDown(await screen.findByLabelText("Your name"), { key: "Enter" });
+    await question("How should kinlo look?");
+    enter();
+    await question("Would you like an assistant?");
+    enter();
+    await question("Bring your people with you?");
+    fireEvent.click(screen.getByRole("button", { name: "Choose a file" }));
+    expect(await screen.findByText(/2 people found in/)).toBeInTheDocument();
+    spy.mockRestore();
+    // Nothing is added yet: the side is not known.
+    expect(await countContacts()).toBe(0);
+    fireEvent.click(screen.getByRole("button", { name: /^OK/ }));
+
+    await question("What will you use kinlo for?");
+    fireEvent.click(screen.getByRole("button", { name: /^Business/ }));
+    expect(await screen.findByRole("navigation", { name: "Main" })).toBeInTheDocument();
+    await waitFor(async () => expect(await countContacts("business")).toBe(2));
+    expect(await countContacts("personal")).toBe(0);
   });
 
   it("the name can be skipped, and you can go back", async () => {
