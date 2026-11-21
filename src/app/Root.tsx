@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Bleed, type BleedSpec } from "@/features/onboarding/Bleed";
 import { Onboarding, type OnboardingResult } from "@/features/onboarding/Onboarding";
 import { AppShell } from "./AppShell";
+import { useBackgroundSetting, useReminderNotifications } from "./notifications";
 import { useSaveSetting, useSettings, useThemeSync } from "./settings";
 
 /**
@@ -14,6 +15,9 @@ export function Root() {
   const save = useSaveSetting();
   const navigate = useNavigate();
   useThemeSync();
+  // These run for as long as the app does, whatever is on screen.
+  useReminderNotifications();
+  useBackgroundSetting();
 
   const [bleed, setBleed] = useState<{ spec: BleedSpec; phase: "covering" | "clearing" } | null>(null);
   const pending = useRef<OnboardingResult | null>(null);

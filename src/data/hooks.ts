@@ -1,6 +1,17 @@
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import * as data from "./index";
-import type { ContactFilter, ContactInput, ContactPatch, Interaction, InteractionInput, Side } from "./types";
+import type { ReminderFilter } from "./reminders";
+import type {
+  ContactFilter,
+  ContactInput,
+  ContactPatch,
+  Interaction,
+  InteractionInput,
+  Reminder,
+  ReminderInput,
+  Side,
+} from "./types";
 
 /**
  * React bindings for the data layer. Screens read with these hooks and write with the
@@ -186,6 +197,79 @@ export const useDeleteInteraction = () =>
     (interaction: Interaction) => data.deleteInteraction(interaction.id),
     (interaction) => interaction.contact_id,
   );
+
+/**
+ * Today's date in local time, as YYYY-MM-DD. It changes at midnight, so anything keyed on
+ * it (what is overdue, what is due today, whose birthday is near) refreshes by itself
+ * when the app is left open overnight.
+ */
+export function useDayKey(): string {
+  const read = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const [day, setDay] = useState(read);
+  useEffect(() => {
+    const timer = setInterval(() => setDay(read()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  return day;
+}
+
+export function useReminders(filter: ReminderFilter = {}) {
+  const day = useDayKey();
+  return useQuery({
+    queryKey: [...keys.reminders, "list", filter, day],
+    queryFn: () => data.listReminders(filter),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useOverdueContacts(side: Side) {
+  const day = useDayKey();
+  return useQuery({
+    queryKey: [...keys.contacts, "overdue", side, day],
+    queryFn: () => data.listOverdueContacts(undefined, side),
+  });
+}
+
+export function useUpcomingBirthdays(side: Side) {
+  const day = useDayKey();
+  return useQuery({
+    queryKey: [...keys.contacts, "birthdays", side, day],
+    queryFn: () => data.listUpcomingBirthdays(side),
+  });
+}
+
+export function useOpenDeals() {
+  return useQuery({
+    queryKey: [...keys.deals, "open-summary"],
+    queryFn: async () => ({ count: await data.countOpenDeals(), totals: await data.openDealTotals() }),
+  });
+}
+
+/** Every change to a reminder refreshes every list of reminders. */
+function useReminderMutation<V, R>(run: (variables: V) => Promise<R>) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: run,
+    onSuccess: () => void client.invalidateQueries({ queryKey: keys.reminders }),
+  });
+}
+
+export const useCreateReminder = () => useReminderMutation((input: ReminderInput) => data.createReminder(input));
+
+export const useUpdateReminder = () =>
+  useReminderMutation(
+    ({ id, patch }: { id: string; patch: Partial<Pick<Reminder, "title" | "due_at" | "repeat_rule" | "contact_id">> }) =>
+      data.updateReminder(id, patch),
+  );
+
+export const useCompleteReminder = () => useReminderMutation((id: string) => data.completeReminder(id));
+export const useSnoozeReminder = () =>
+  useReminderMutation(({ id, until }: { id: string; until: string }) => data.snoozeReminder(id, until));
+export const useReopenReminder = () => useReminderMutation((id: string) => data.reopenReminder(id));
+export const useDeleteReminder = () => useReminderMutation((id: string) => data.deleteReminder(id));
 
 /** Renaming or deleting a tag changes it on everyone who has it. */
 export function useRenameTag() {

@@ -124,3 +124,14 @@ export async function countOpenDeals(): Promise<number> {
   );
   return rows[0]?.n ?? 0;
 }
+
+/** What the open deals add up to, one total per currency, largest first. */
+export async function openDealTotals(): Promise<{ currency: string; total: number; count: number }[]> {
+  return db().select(
+    `SELECT d.currency, coalesce(sum(d.value), 0) AS total, count(*) AS count
+       FROM deals d JOIN contacts c ON c.id = d.contact_id
+      WHERE d.closed_at IS NULL AND c.archived = 0
+      GROUP BY d.currency
+      ORDER BY total DESC, d.currency`,
+  );
+}

@@ -16,6 +16,7 @@ import {
   MoreHorizontal,
   Pencil,
   Phone,
+  Plus,
   Trash2,
   UserX,
 } from "lucide-react";
@@ -43,6 +44,7 @@ import { formatBirthday, formatDate, relativeDay } from "@/lib/dates";
 import { openExternal } from "@/lib/external";
 import { useUI } from "@/store/ui";
 import { keepInTouchLabel, sideLabels } from "./labels";
+import { ReminderRow } from "@/features/reminders/ReminderRow";
 import { Timeline } from "./Timeline";
 
 export function ContactPage() {
@@ -196,12 +198,25 @@ function ContactView({ contact }: { contact: Contact }) {
   );
 }
 
-function Card({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: ReactNode }) {
+function Card({
+  title,
+  icon: Icon,
+  action,
+  children,
+}: {
+  title: string;
+  icon: LucideIcon;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <section className="glass p-4">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-medium tracking-normal text-muted">
-        <Icon size={14} strokeWidth={1.5} /> {title}
-      </h2>
+    <section aria-label={title} className="glass p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-sm font-medium tracking-normal text-muted">
+          <Icon size={14} strokeWidth={1.5} /> {title}
+        </h2>
+        {action}
+      </div>
       {children}
     </section>
   );
@@ -307,16 +322,28 @@ function Notes({ contact }: { contact: Contact }) {
 
 function Reminders({ contactId }: { contactId: string }) {
   const { data: reminders = [] } = useContactReminders(contactId);
+  const openForm = useUI((s) => s.openReminderForm);
   return (
-    <Card title="Reminders" icon={Bell}>
+    <Card
+      title="Reminders"
+      icon={Bell}
+      action={
+        <button
+          aria-label="Add reminder"
+          onClick={() => openForm({ contactId })}
+          className="-my-1 flex h-6 w-6 items-center justify-center rounded-[8px] text-muted hover:bg-control hover:text-fg"
+        >
+          <Plus size={14} strokeWidth={1.5} />
+        </button>
+      }
+    >
       {reminders.length === 0 ? (
         <p className="text-base text-subtle">No reminders.</p>
       ) : (
-        <ul className="flex flex-col gap-2 text-base">
-          {reminders.map((r) => (
-            <li key={r.id} className="flex justify-between gap-3">
-              <span className="min-w-0 truncate">{r.title}</span>
-              <span className="shrink-0 text-muted">{relativeDay(r.due_at)}</span>
+        <ul className="flex flex-col">
+          {reminders.map((reminder) => (
+            <li key={reminder.id}>
+              <ReminderRow reminder={reminder} hidePerson compact />
             </li>
           ))}
         </ul>
