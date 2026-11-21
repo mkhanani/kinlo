@@ -15,6 +15,32 @@ export function toBoard(stages: Stage[], deals: DealWithContact[]): Board {
   return board;
 }
 
+/** How far back the Won and Lost columns look unless asked to show everything. */
+export const RECENT_DAYS = 30;
+
+/**
+ * Won and Lost would grow for ever, so by default they only show deals closed in the last
+ * 30 days. Open stages always show everything. `showAll` holds the stages the user has
+ * asked to see in full. Returns the deals to show, and how many are held back per stage.
+ */
+export function recentDeals(
+  stages: Stage[],
+  deals: DealWithContact[],
+  showAll: ReadonlySet<string>,
+  now: Date = new Date(),
+): { visible: DealWithContact[]; older: Record<string, number> } {
+  const cutoff = now.getTime() - RECENT_DAYS * 86_400_000;
+  const closing = new Set(stages.filter((s) => s.outcome).map((s) => s.id));
+  const older: Record<string, number> = {};
+  const visible = deals.filter((deal) => {
+    if (!closing.has(deal.stage_id) || !deal.closed_at) return true;
+    if (new Date(deal.closed_at).getTime() >= cutoff) return true;
+    older[deal.stage_id] = (older[deal.stage_id] ?? 0) + 1;
+    return showAll.has(deal.stage_id);
+  });
+  return { visible, older };
+}
+
 export function findStage(board: Board, dealId: string): string | null {
   for (const [stageId, deals] of Object.entries(board)) {
     if (deals.some((d) => d.id === dealId)) return stageId;

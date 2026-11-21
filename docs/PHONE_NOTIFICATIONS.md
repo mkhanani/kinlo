@@ -63,6 +63,6 @@ Leave **C** for a later major version, and skip **D**.
 - **What gets written.** Each open reminder becomes an event at its due time with an alert, in the "kinlo" calendar. Editing, snoozing, finishing or deleting the reminder updates or removes the event. Repeating reminders become repeating events.
 - **When it syncs.** Whenever a reminder changes while kinlo is open, and once at launch to catch up.
 - **Turning it off.** One switch in Settings disconnects and can remove the "kinlo" calendar.
-- **One thing needed from you.** Google only allows this through an app registration in Google Cloud, which is free and takes about ten minutes. It has to belong to the project's owner, so you would create it and paste two values into the build. Until Google has reviewed the app, its sign-in page shows an "unverified app" warning; review is free but takes days to weeks.
+- **One thing needed from you.** Google only allows this through an app registration in Google Cloud, which is free and takes about ten minutes. It has to belong to the project's owner. The steps are in `GOOGLE_CLOUD_SETUP.md`. Whether Google then needs to review the app depends on how it classifies the one permission kinlo asks for, which the console shows during setup.
 
 Other calendars (iCloud, Fastmail, Nextcloud) use a common standard and can follow once Google works.

@@ -11,13 +11,30 @@ import {
   positionBetween,
   renumberStage,
 } from "@/data";
+import { db } from "@/data/driver";
 import { useTestDatabase } from "@/data/testing";
 import type { DealWithContact } from "@/data/types";
 import { renderApp } from "@/test/render";
-import { columnTotals, findStage, formatMoney, MIN_GAP, moveOnBoard, positionAt, toBoard } from "./board";
+import {
+  columnTotals,
+  findStage,
+  formatMoney,
+  MIN_GAP,
+  moveOnBoard,
+  positionAt,
+  RECENT_DAYS,
+  recentDeals,
+  toBoard,
+} from "./board";
 import { parseAmount } from "./DealFormDialog";
 
 useTestDatabase();
+
+const daysAgoIso = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+
+/** Rewrites when a deal was closed, to stand in for one that was closed some time ago. */
+const closedDaysAgo = (dealId: string, days: number) =>
+  db().execute("UPDATE deals SET closed_at = $2 WHERE id = $1", [dealId, daysAgoIso(days)]);
 
 const type = (element: HTMLElement, value: string) => fireEvent.change(element, { target: { value } });
 
@@ -92,6 +109,29 @@ describe("the board, as plain data", () => {
     expect(formatMoney(1_250_000, "USD", true)).toMatch(/1\.25M/);
     expect(formatMoney(99_000, "USD", true)).toMatch(/99,000/); // not shortened until six figures
     expect(formatMoney(10, "ZZZZ")).toBe("10 ZZZZ"); // a currency code the system does not know
+  });
+
+  it("holds back deals closed more than 30 days ago, per closing stage, unless asked", async () => {
+    const stages = await listStages();
+    const now = new Date("2026-06-30T12:00:00.000Z");
+    const closed = (days: number) => new Date(now.getTime() - days * 86_400_000).toISOString();
+    const deals = [
+      { id: "open", stage_id: "stage-lead", closed_at: null },
+      { id: "won-new", stage_id: "stage-won", closed_at: closed(29) },
+      { id: "won-edge", stage_id: "stage-won", closed_at: closed(30) },
+      { id: "won-old", stage_id: "stage-won", closed_at: closed(31) },
+      { id: "lost-old", stage_id: "stage-lost", closed_at: closed(200) },
+    ] as DealWithContact[];
+
+    const byDefault = recentDeals(stages, deals, new Set(), now);
+    expect(byDefault.visible.map((d) => d.id)).toEqual(["open", "won-new", "won-edge"]);
+    expect(byDefault.older).toEqual({ "stage-won": 1, "stage-lost": 1 });
+
+    const wonInFull = recentDeals(stages, deals, new Set(["stage-won"]), now);
+    expect(wonInFull.visible.map((d) => d.id)).toEqual(["open", "won-new", "won-edge", "won-old"]);
+    // Still counted, so the button can offer the way back.
+    expect(wonInFull.older).toEqual({ "stage-won": 1, "stage-lost": 1 });
+    expect(RECENT_DAYS).toBe(30);
   });
 
   it("reads amounts the way people type them", () => {
@@ -197,6 +237,43 @@ describe("Pipeline screen", () => {
     expect(await within(proposal).findByText("Brand refresh")).toBeInTheDocument();
     const saved = (await listDeals({ stageId: "stage-proposal" }))[0]!;
     expect(saved).toMatchObject({ title: "Brand refresh", value: 12500, currency: "EUR", contact_id: carla.id });
+  });
+
+  it("Won and Lost show the last 30 days, with a way to see everything", async () => {
+    const { carla, a } = await seed();
+    const recent = await createDeal({ contact_id: carla.id, title: "Won last week", stage_id: "stage-won" });
+    const old1 = await createDeal({ contact_id: carla.id, title: "Won in spring", stage_id: "stage-won" });
+    const old2 = await createDeal({ contact_id: carla.id, title: "Won last year", stage_id: "stage-won" });
+    const lostOld = await createDeal({ contact_id: carla.id, title: "Lost long ago", stage_id: "stage-lost" });
+    await closedDaysAgo(recent.id, 6);
+    await closedDaysAgo(old1.id, 45);
+    await closedDaysAgo(old2.id, 400);
+    await closedDaysAgo(lostOld.id, 31);
+    // An open deal created long ago is never hidden: only closing dates count.
+    await db().execute("UPDATE deals SET created_at = $2 WHERE id = $1", [a.id, daysAgoIso(900)]);
+
+    renderApp("/pipeline", { activeSide: "business" });
+    const won = await screen.findByRole("region", { name: "Won" });
+    expect(await within(won).findByText("Won last week")).toBeInTheDocument();
+    expect(within(won).queryByText("Won in spring")).not.toBeInTheDocument();
+    expect(within(won).getByText("last 30 days")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Lead" })).getByText("A")).toBeInTheDocument();
+
+    // Lost has only an older deal, so it looks empty but says there is more.
+    const lost = screen.getByRole("region", { name: "Lost" });
+    expect(within(lost).queryByText("Lost long ago")).not.toBeInTheDocument();
+    expect(within(lost).getByRole("button", { name: "Show all (1 older)" })).toBeInTheDocument();
+
+    fireEvent.click(within(won).getByRole("button", { name: "Show all (2 older)" }));
+    expect(await within(won).findByText("Won in spring")).toBeInTheDocument();
+    expect(within(won).getByText("Won last year")).toBeInTheDocument();
+    // The note under the heading goes; the button now offers the way back instead.
+    expect(within(won).queryByText("last 30 days")).not.toBeInTheDocument();
+    // Each column is switched on its own.
+    expect(within(lost).queryByText("Lost long ago")).not.toBeInTheDocument();
+
+    fireEvent.click(within(won).getByRole("button", { name: "Show last 30 days" }));
+    await waitFor(() => expect(within(won).queryByText("Won in spring")).not.toBeInTheDocument());
   });
 
   it("moves a deal from its menu, and the open count follows", async () => {

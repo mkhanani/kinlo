@@ -22,7 +22,16 @@ import { PageHeader } from "@/components/ui/Page";
 import { useContactCount, useDeals, useDropDeal, useStages } from "@/data/hooks";
 import type { DealWithContact, Stage } from "@/data/types";
 import { useUI } from "@/store/ui";
-import { columnTotals, findStage, formatMoney, moveOnBoard, positionAt, toBoard, type Board } from "./board";
+import {
+  columnTotals,
+  findStage,
+  formatMoney,
+  moveOnBoard,
+  positionAt,
+  recentDeals,
+  toBoard,
+  type Board,
+} from "./board";
 import { DealCard } from "./DealCard";
 
 /** The pipeline: one column per stage, deals as cards you drag between them. */
@@ -34,7 +43,17 @@ export function PipelinePage() {
   const openDealForm = useUI((s) => s.openDealForm);
   const openContactForm = useUI((s) => s.openContactForm);
 
-  const saved = useMemo(() => toBoard(stages, deals ?? []), [stages, deals]);
+  // Won and Lost show the last 30 days unless asked for everything. Remembered while the app is open.
+  const [showAll, setShowAll] = useState<ReadonlySet<string>>(new Set());
+  const toggleShowAll = (stageId: string) =>
+    setShowAll((current) => {
+      const next = new Set(current);
+      if (!next.delete(stageId)) next.add(stageId);
+      return next;
+    });
+  const { visible, older } = useMemo(() => recentDeals(stages, deals ?? [], showAll), [stages, deals, showAll]);
+
+  const saved = useMemo(() => toBoard(stages, visible), [stages, visible]);
   // While a card is in the air, the board shows where it would land.
   const [dragging, setDragging] = useState<{ id: string; board: Board } | null>(null);
   const board = dragging?.board ?? saved;
@@ -105,9 +124,20 @@ export function PipelinePage() {
     if (unchanged) return;
 
     const { position, needsRenumber } = positionAt(column, index);
-    const next = Object.values(settled)
-      .flat()
-      .map((d) => (d.id === id ? { ...d, position } : d));
+    // What the board should show at once, before the save comes back. Built from every
+    // deal, not only the ones on screen, so older closed deals are not forgotten. The
+    // closing time mirrors what the database will set.
+    const closes = !!stages.find((s) => s.id === to.stageId)?.outcome;
+    const next = (deals ?? []).map((d) =>
+      d.id === id
+        ? {
+            ...d,
+            stage_id: to.stageId,
+            position,
+            closed_at: closes ? (d.closed_at ?? new Date().toISOString()) : null,
+          }
+        : d,
+    );
     drop.mutate({ id, stageId: to.stageId, position, needsRenumber, next });
   };
 
@@ -158,7 +188,16 @@ export function PipelinePage() {
         >
           <div className="-mx-2 flex min-h-0 flex-1 gap-2.5 overflow-x-auto px-2 pb-2">
             {stages.map((stage) => (
-              <Column key={stage.id} stage={stage} stages={stages} deals={board[stage.id] ?? []} draggingId={dragging?.id ?? null} />
+              <Column
+                key={stage.id}
+                stage={stage}
+                stages={stages}
+                deals={board[stage.id] ?? []}
+                draggingId={dragging?.id ?? null}
+                older={older[stage.id] ?? 0}
+                showingAll={showAll.has(stage.id)}
+                onToggleShowAll={() => toggleShowAll(stage.id)}
+              />
             ))}
           </div>
           {/*
@@ -184,11 +223,18 @@ function Column({
   stages,
   deals,
   draggingId,
+  older,
+  showingAll,
+  onToggleShowAll,
 }: {
   stage: Stage;
   stages: Stage[];
   deals: DealWithContact[];
   draggingId: string | null;
+  /** How many of this stage's deals closed more than 30 days ago. Always 0 for an open stage. */
+  older: number;
+  showingAll: boolean;
+  onToggleShowAll: () => void;
 }) {
   const openDealForm = useUI((s) => s.openDealForm);
   // The column itself is a drop target, so a deal can land in an empty one.
@@ -217,6 +263,7 @@ function Column({
       </header>
       <p className="mb-2 min-h-[18px] px-1.5 text-sm text-muted">
         {totals.map((t) => formatMoney(t.total, t.currency, true)).join(" · ")}
+        {stage.outcome && !showingAll && <span className="text-subtle">{totals.length ? " · " : ""}last 30 days</span>}
       </p>
 
       <SortableContext items={deals.map((d) => d.id)} strategy={verticalListSortingStrategy}>
@@ -231,6 +278,15 @@ function Column({
           )}
         </ul>
       </SortableContext>
+
+      {older > 0 && (
+        <button
+          onClick={onToggleShowAll}
+          className="mt-2 flex h-7 shrink-0 items-center justify-center rounded-[8px] text-sm text-muted transition-colors duration-150 hover:bg-control hover:text-fg"
+        >
+          {showingAll ? "Show last 30 days" : `Show all (${older} older)`}
+        </button>
+      )}
     </section>
   );
 }
