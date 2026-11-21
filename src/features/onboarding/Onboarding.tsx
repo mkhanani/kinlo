@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, Check, ChevronDown, ChevronUp, CornerDownLeft } from "lucide-react";
+import { useSaveKey } from "@/ai/hooks";
+import { PROVIDER_IDS, PROVIDERS } from "@/ai/providers";
 import { useSaveSetting, useSettings } from "@/app/settings";
 import { LogoMark } from "@/components/Logo";
 import { TitleBar } from "@/components/shell/TitleBar";
 import { Button } from "@/components/ui/Button";
-import type { SidesChoice, ThemePref } from "@/data/settings";
+import type { AiProvider, SidesChoice, ThemePref } from "@/data/settings";
 import type { Side } from "@/data/types";
 import { ease } from "@/lib/motion";
 import type { BleedOrigin } from "./Bleed";
@@ -27,7 +29,7 @@ export const SIDE_COLOR: Record<Side, string> = { personal: "#f6f6f5", business:
 /** Both sides together: the grey halfway between the two, so it shows over either half. */
 export const BOTH_COLOR = "#7f7f82";
 
-const STEPS = ["welcome", "name", "theme", "sides"] as const;
+const STEPS = ["welcome", "name", "theme", "assistant", "sides"] as const;
 type Step = (typeof STEPS)[number];
 
 /**
@@ -92,6 +94,7 @@ export function Onboarding({ onChoose }: { onChoose: (result: OnboardingResult) 
             {step === "theme" && (
               <ThemeStep number={index} value={settings.theme} onPick={(theme) => save("theme", theme)} onNext={next} />
             )}
+            {step === "assistant" && <AssistantStep number={index} onNext={next} />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -139,7 +142,7 @@ function Welcome({ onNext }: { onNext: () => void }) {
         </Button>
         <EnterHint />
       </div>
-      <p className="mt-6 text-sm text-subtle">Three quick questions. It takes under a minute.</p>
+      <p className="mt-6 text-sm text-subtle">A few quick questions. It takes about a minute.</p>
     </div>
   );
 }
@@ -219,6 +222,109 @@ function ThemeStep({ number, value, onPick, onNext }: { number: number; value: T
       <div className="mt-6 flex items-center gap-3">
         <Button variant="primary" onClick={onNext} className="!h-9 !px-4">
           OK <Check size={15} strokeWidth={1.75} />
+        </Button>
+        <EnterHint />
+      </div>
+    </Question>
+  );
+}
+
+const ASSISTANT_CHOICES: { value: AiProvider | null; key: string; label: string; detail: string }[] = [
+  ...PROVIDER_IDS.map((id, index) => ({
+    value: id,
+    key: "ABCD"[index]!,
+    label: PROVIDERS[id].label,
+    detail: PROVIDERS[id].local ? "Runs on this computer. No key needed." : "With your own API key.",
+  })),
+  { value: null, key: "E", label: "Not now", detail: "Everything else works without it." },
+];
+
+/**
+ * Optional: connect an AI model. Skipping is one key press, and it can be set up later
+ * in Settings. A key typed here goes straight to the system keychain.
+ */
+function AssistantStep({ number, onNext }: { number: number; onNext: () => void }) {
+  const settings = useSettings();
+  const save = useSaveSetting();
+  const saveKey = useSaveKey();
+  const [choice, setChoice] = useState<AiProvider | null>(settings.aiProvider);
+  const [key, setKey] = useState("");
+  const needsKey = choice !== null && PROVIDERS[choice].needsKey;
+
+  const finish = () => {
+    if (choice !== settings.aiProvider) {
+      save("aiProvider", choice);
+      save("aiModel", null);
+      save("aiBaseUrl", null);
+    }
+    if (choice && needsKey && key.trim()) saveKey.mutate({ provider: choice, key });
+    onNext();
+  };
+  useEnter(finish);
+
+  // The letters pick an answer, except while a key is being typed.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.target instanceof HTMLInputElement) return;
+      const match = ASSISTANT_CHOICES.find((c) => c.key.toLowerCase() === e.key.toLowerCase());
+      if (match) setChoice(match.value);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  return (
+    <Question
+      number={number}
+      title="Would you like an assistant?"
+      detail="Optional. Connect an AI model and you can ask kinlo about your people. What you ask is sent to the provider you pick, and nowhere else."
+    >
+      <div role="radiogroup" aria-label="Assistant" className="grid max-w-[520px] grid-cols-2 gap-2">
+        {ASSISTANT_CHOICES.map((option) => {
+          const selected = choice === option.value;
+          return (
+            <button
+              key={option.key}
+              role="radio"
+              aria-checked={selected}
+              onClick={() => setChoice(option.value)}
+              className={`flex items-center gap-3 rounded-[10px] border px-3 py-2 text-left transition-colors duration-200 ${
+                option.value === null ? "col-span-2" : ""
+              } ${selected ? "border-[var(--fg)] bg-control" : "border-hairline bg-control hover:bg-control-hover"}`}
+            >
+              <span
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] border text-xs font-semibold ${
+                  selected ? "border-[var(--fg)] bg-fg text-bg" : "border-hairline text-muted"
+                }`}
+              >
+                {option.key}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-base font-medium">{option.label}</span>
+                <span className="block text-sm text-muted">{option.detail}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {needsKey && (
+        <div className="mt-4 max-w-[520px]">
+          <input
+            aria-label="API key"
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            placeholder={`Paste your ${PROVIDERS[choice].label} key, or add it later`}
+            className="w-full border-b border-hairline bg-transparent pb-2 text-md outline-none transition-colors duration-200 placeholder:text-subtle focus:border-[var(--fg)]"
+          />
+          <p className="mt-2 text-sm text-subtle">Kept in your system's keychain, never in kinlo's own files.</p>
+        </div>
+      )}
+      <div className="mt-6 flex items-center gap-3">
+        <Button variant="primary" onClick={finish} className="!h-9 !px-4">
+          {choice ? "OK" : "Skip"} <Check size={15} strokeWidth={1.75} />
         </Button>
         <EnterHint />
       </div>

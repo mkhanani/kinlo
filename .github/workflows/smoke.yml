@@ -1,7 +1,8 @@
 # Desktop smoke.
 # Builds the real app and runs it on real Windows, macOS and Linux machines: starts it,
 # walks the welcome setup and adds a person by keyboard, takes screenshots, and checks the
-# app's own database afterwards. The screenshots are attached to the run.
+# app's own database afterwards. The screenshots are attached to the run. It also checks
+# that the system keychain on each machine keeps and gives back a key.
 #
 # This is evidence that the app works on each system, beyond "it compiles". It is not a
 # required check: hosted machines sometimes refuse scripted keystrokes.
@@ -46,7 +47,7 @@ jobs:
         run: |
           APT="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o DPkg::Lock::Timeout=120"
           $APT update
-          $APT install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev xvfb xdotool imagemagick
+          $APT install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev xvfb xdotool imagemagick gnome-keyring
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -64,6 +65,19 @@ jobs:
       - name: Run it (Linux, in a virtual display)
         if: runner.os == 'Linux'
         run: xvfb-run -a -s "-screen 0 1280x840x24" node scripts/smoke.mjs
+      # API keys are kept in the system keychain. This saves, reads and removes a test
+      # entry in the real one on each system: Credential Manager, Keychain, Secret Service.
+      - name: Check the system keychain (Windows and macOS)
+        if: runner.os != 'Linux'
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib the_real_keychain_keeps_a_key -- --ignored
+      - name: Check the system keychain (Linux, with GNOME Keyring)
+        if: runner.os == 'Linux'
+        run: |
+          dbus-run-session -- sh -c '
+            printf "smoke" | gnome-keyring-daemon --unlock --components=secrets >/dev/null
+            sleep 1
+            cargo test --manifest-path src-tauri/Cargo.toml --lib the_real_keychain_keeps_a_key -- --ignored
+          '
       - name: Attach screenshots
         if: always()
         uses: actions/upload-artifact@v7

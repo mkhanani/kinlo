@@ -31,6 +31,7 @@ Production has two extra guards: the tag must equal the app version (`v0.1.0` fo
 2. walks the welcome setup and adds a person using only the keyboard,
 3. takes screenshots along the way,
 4. reads the app's database afterwards to check all migrations ran, the setup finished and the person was saved.
+5. saves, reads and removes a test entry in that system's real keychain (Credential Manager on Windows, Keychain on macOS, GNOME Keyring on Linux), which is where API keys for the assistant are kept.
 
 The screenshots are attached to the run, and the latest set for each system is kept on the branches `smoke-results/windows`, `smoke-results/macos` and `smoke-results/linux`, where they can be browsed on GitHub.
 

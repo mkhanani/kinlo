@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { getOpenAtLogin, notifyNow, quitApp, setOpenAtLogin } from "@/app/notifications";
 import { useSaveSetting, useSettings } from "@/app/settings";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
 import { Page, PageHeader } from "@/components/ui/Page";
 import { Segmented } from "@/components/ui/Segmented";
+import { SettingRow as Row } from "@/components/ui/SettingRow";
 import { Switch } from "@/components/ui/Switch";
 import type { SidesChoice, ThemePref } from "@/data/settings";
+import { AssistantSettings } from "@/features/assistant/AssistantSettings";
 import { isTauri } from "@/lib/platform";
 
 export function SettingsPage() {
@@ -18,6 +20,12 @@ export function SettingsPage() {
   useEffect(() => setName(userName ?? ""), [userName]);
   const [currency, setCurrency] = useState(defaultCurrency);
   useEffect(() => setCurrency(defaultCurrency), [defaultCurrency]);
+
+  // "Connect a model" in the assistant panel lands here, at the right section.
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView({ block: "start" });
+  }, [hash]);
 
   const themes: { value: ThemePref; label: string; icon: typeof Sun }[] = [
     { value: "system", label: "System", icon: Monitor },
@@ -90,6 +98,8 @@ export function SettingsPage() {
         </Row>
       </div>
 
+      <AssistantSettings />
+
       {isTauri && <NotificationSettings />}
     </Page>
   );
@@ -155,17 +165,5 @@ function NotificationSettings() {
         </Row>
       </div>
     </>
-  );
-}
-
-function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-6 px-5 py-4">
-      <div className="min-w-0">
-        <div className="text-base font-medium">{label}</div>
-        {hint && <div className="mt-0.5 text-sm text-muted">{hint}</div>}
-      </div>
-      <div className="shrink-0">{children}</div>
-    </div>
   );
 }
