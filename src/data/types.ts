@@ -3,8 +3,13 @@
  * Timestamps are ISO 8601 strings in UTC. Dates are YYYY-MM-DD.
  */
 
-export const CONTACT_KINDS = ["personal", "client", "lead", "other"] as const;
-export type ContactKind = (typeof CONTACT_KINDS)[number];
+/** The two sides of kinlo. A person can be on either, or on both. */
+export const SIDES = ["personal", "business"] as const;
+export type Side = (typeof SIDES)[number];
+
+/** What a business contact is to your work. "other" covers suppliers, partners and the like. */
+export const BUSINESS_KINDS = ["lead", "client", "other"] as const;
+export type BusinessKind = (typeof BUSINESS_KINDS)[number];
 
 export const INTERACTION_TYPES = ["call", "message", "meeting", "email", "note"] as const;
 export type InteractionType = (typeof INTERACTION_TYPES)[number];
@@ -31,7 +36,10 @@ export interface Contact {
   id: string;
   name: string;
   nickname: string | null;
-  kind: ContactKind;
+  /** On the personal side. */
+  personal: boolean;
+  /** On the business side when set. Everyone is on at least one side. */
+  business: BusinessKind | null;
   company: string | null;
   role: string | null;
   emails: LabeledValue[];
@@ -45,7 +53,6 @@ export interface Contact {
   /** How often to be in touch, in days. Null means no reminder to keep in touch. */
   keep_in_touch_days: number | null;
   last_contacted_at: string | null;
-  avatar_path: string | null;
   archived: boolean;
   created_at: string;
   updated_at: string;
@@ -65,7 +72,10 @@ export type ContactPatch = Partial<Omit<Contact, "id" | "created_at" | "updated_
 export interface ContactFilter {
   /** Free text, matched against names, company, notes and interaction summaries. */
   search?: string;
-  kind?: ContactKind;
+  /** Only people on this side. */
+  side?: Side;
+  /** Only business contacts of this kind. */
+  business?: BusinessKind;
   tagId?: string;
   overdueOnly?: boolean;
   /** Archived contacts are left out unless this is set. */

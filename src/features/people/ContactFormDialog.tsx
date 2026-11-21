@@ -1,23 +1,32 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, X } from "lucide-react";
+import { useSettings, useSide } from "@/app/settings";
+import { Avatar } from "@/components/ui/Avatar";
+import { ToggleChip } from "@/components/ui/Chip";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { Segmented } from "@/components/ui/Segmented";
 import { TagInput } from "@/components/ui/TagInput";
-import { useContact, useCreateContact, useTags, useUpdateContact } from "@/data/hooks";
-import { CONTACT_KINDS } from "@/data/types";
-import type { Contact, ContactInput, ContactKind, LabeledValue } from "@/data/types";
+import { useAvatars, useContact, useCreateContact, useTags, useUpdateContact } from "@/data/hooks";
+import { BUSINESS_KINDS } from "@/data/types";
+import type { BusinessKind, Contact, ContactInput, LabeledValue, Side } from "@/data/types";
 import { buildBirthday, MONTHS, parseBirthday } from "@/lib/dates";
+import { toThumbnail } from "@/lib/image";
 import { useUI } from "@/store/ui";
-import { KEEP_IN_TOUCH, KIND_LABEL } from "./labels";
+import { BUSINESS_LABEL, KEEP_IN_TOUCH } from "./labels";
 
 interface FormState {
   name: string;
   nickname: string;
-  kind: ContactKind;
+  personal: boolean;
+  /** On the business side. `businessKind` says as what. */
+  business: boolean;
+  businessKind: BusinessKind;
+  /** undefined: leave the photo as it is. null: remove it. A data URL: use this one. */
+  avatar: string | null | undefined;
   company: string;
   role: string;
   emails: LabeledValue[];
@@ -36,12 +45,16 @@ interface FormState {
 const blank = (): LabeledValue => ({ label: "", value: "" });
 const orBlank = (list: LabeledValue[]) => (list.length ? list.map((i) => ({ label: i.label ?? "", value: i.value })) : [blank()]);
 
-function toForm(contact: Contact | null): FormState {
+function toForm(contact: Contact | null, side: Side): FormState {
   const birthday = parseBirthday(contact?.birthday);
   return {
     name: contact?.name ?? "",
     nickname: contact?.nickname ?? "",
-    kind: contact?.kind ?? "personal",
+    // A new person starts on the side you are looking at.
+    personal: contact ? contact.personal : side === "personal",
+    business: contact ? contact.business !== null : side === "business",
+    businessKind: contact?.business ?? "lead",
+    avatar: undefined,
     company: contact?.company ?? "",
     role: contact?.role ?? "",
     emails: orBlank(contact?.emails ?? []),
@@ -79,8 +92,11 @@ export function ContactFormDialog() {
 }
 
 function ContactForm({ contact, onDone }: { contact: Contact | null; onDone: () => void }) {
-  const [form, setForm] = useState<FormState>(() => toForm(contact));
-  const [error, setError] = useState<{ name?: string; birthday?: string; save?: string }>({});
+  const side = useSide();
+  const { sides } = useSettings();
+  const [form, setForm] = useState<FormState>(() => toForm(contact, side));
+  const [error, setError] = useState<{ name?: string; birthday?: string; side?: string; photo?: string; save?: string }>({});
+  const fileInput = useRef<HTMLInputElement>(null);
   const { data: tags = [] } = useTags();
   const create = useCreateContact();
   const update = useUpdateContact();
@@ -104,7 +120,9 @@ function ContactForm({ contact, onDone }: { contact: Contact | null; onDone: () 
     });
     if (hasBirthday && !birthday) problems.birthday = "That date does not exist. Month and day are needed, the year is optional.";
 
-    if (problems.name || problems.birthday) {
+    if (!form.personal && !form.business) problems.side = "Choose Personal, Business, or both.";
+
+    if (problems.name || problems.birthday || problems.side) {
       setError(problems);
       return;
     }
@@ -112,7 +130,8 @@ function ContactForm({ contact, onDone }: { contact: Contact | null; onDone: () 
     const input: ContactInput = {
       name: form.name,
       nickname: form.nickname,
-      kind: form.kind,
+      personal: form.personal,
+      business: form.business ? form.businessKind : null,
       company: form.company,
       role: form.role,
       emails: form.emails,
@@ -127,9 +146,9 @@ function ContactForm({ contact, onDone }: { contact: Contact | null; onDone: () 
 
     try {
       if (contact) {
-        await update.mutateAsync({ id: contact.id, patch: input, tags: form.tags });
+        await update.mutateAsync({ id: contact.id, patch: input, tags: form.tags, avatar: form.avatar });
       } else {
-        const created = await create.mutateAsync({ input, tags: form.tags });
+        const created = await create.mutateAsync({ input, tags: form.tags, avatar: form.avatar });
         navigate(`/people/${created.id}`);
       }
       onDone();
@@ -138,6 +157,9 @@ function ContactForm({ contact, onDone }: { contact: Contact | null; onDone: () 
     }
   };
 
+  const { data: avatars } = useAvatars();
+  const hasPhoto = !!contact && !!avatars?.[contact.id];
+
   const keepOptions = [...KEEP_IN_TOUCH];
   if (form.keep && !keepOptions.some((o) => String(o.days) === form.keep)) {
     keepOptions.push({ days: Number(form.keep), label: `Every ${form.keep} days` });
@@ -145,6 +167,45 @@ function ContactForm({ contact, onDone }: { contact: Contact | null; onDone: () 
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-5" noValidate>
+      <div className="flex items-center gap-4">
+        <Avatar name={form.name || "?"} contactId={contact?.id} image={form.avatar} size={64} />
+        <div className="flex flex-col gap-1.5">
+          <div className="flex gap-2">
+            <Button type="button" size="sm" onClick={() => fileInput.current?.click()}>
+              Choose photo
+            </Button>
+            {(form.avatar || (form.avatar === undefined && contact && hasPhoto)) && (
+              <Button type="button" size="sm" variant="ghost" onClick={() => set("avatar", null)}>
+                Remove
+              </Button>
+            )}
+          </div>
+          {error.photo ? (
+            <p className="text-xs text-danger">{error.photo}</p>
+          ) : (
+            <p className="text-xs text-subtle">Optional. Stored only on this computer.</p>
+          )}
+        </div>
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/*"
+          aria-label="Photo"
+          className="hidden"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            try {
+              set("avatar", await toThumbnail(file));
+              setError((prev) => ({ ...prev, photo: undefined }));
+            } catch (cause) {
+              setError((prev) => ({ ...prev, photo: cause instanceof Error ? cause.message : "That image could not be read." }));
+            }
+          }}
+        />
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <Field label="Name" error={error.name} className="col-span-2">
           {(id) => (
@@ -158,18 +219,46 @@ function ContactForm({ contact, onDone }: { contact: Contact | null; onDone: () 
             />
           )}
         </Field>
-        <Field label="Nickname">
+        <Field label="Nickname" className={sides === "both" ? "" : "col-span-2"}>
           {(id) => <Input id={id} value={form.nickname} onChange={(e) => set("nickname", e.target.value)} />}
         </Field>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-muted">Kind</span>
-          <Segmented
-            label="Kind"
-            value={form.kind}
-            onChange={(kind) => set("kind", kind)}
-            options={CONTACT_KINDS.map((k) => ({ value: k, label: KIND_LABEL[k] }))}
-          />
-        </div>
+        {sides === "both" && (
+          <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-muted">Shows on</span>
+              <div className="flex gap-2">
+                <ToggleChip
+                  pressed={form.personal}
+                  onPressedChange={(on) => {
+                    set("personal", on);
+                    setError((prev) => ({ ...prev, side: undefined }));
+                  }}
+                >
+                  Personal
+                </ToggleChip>
+                <ToggleChip
+                  pressed={form.business}
+                  onPressedChange={(on) => {
+                    set("business", on);
+                    setError((prev) => ({ ...prev, side: undefined }));
+                  }}
+                >
+                  Business
+                </ToggleChip>
+              </div>
+              {error.side && <p className="text-xs text-danger">{error.side}</p>}
+          </div>
+        )}
+        {form.business && sides !== "personal" && (
+          <div className="col-span-2 flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-muted">In your work, they are a</span>
+            <Segmented
+              label="Business kind"
+              value={form.businessKind}
+              onChange={(kind) => set("businessKind", kind)}
+              options={BUSINESS_KINDS.map((k) => ({ value: k, label: BUSINESS_LABEL[k] }))}
+            />
+          </div>
+        )}
         <Field label="Company">
           {(id) => <Input id={id} value={form.company} onChange={(e) => set("company", e.target.value)} />}
         </Field>

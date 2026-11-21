@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { HashRouter } from "react-router-dom";
 import { MotionConfig } from "motion/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { AppShell } from "@/app/AppShell";
+import { Root } from "@/app/Root";
 import { StartupError } from "@/app/StartupError";
 import { queryClient } from "@/app/queryClient";
 import { settingsKey } from "@/app/settings";
@@ -32,7 +32,7 @@ async function start() {
       <QueryClientProvider client={queryClient}>
         <MotionConfig reducedMotion="user">
           <HashRouter>
-            <AppShell />
+            <Root />
           </HashRouter>
         </MotionConfig>
       </QueryClientProvider>

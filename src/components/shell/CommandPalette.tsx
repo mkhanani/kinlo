@@ -3,9 +3,9 @@ import type { KeyboardEvent, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, Columns3, House, Search, Settings, UserPlus, Users } from "lucide-react";
+import { ArrowLeftRight, Bell, Columns3, House, Search, Settings, UserPlus, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useSettings } from "@/app/settings";
+import { useSaveSetting, useSettings, useSide } from "@/app/settings";
 import { Avatar } from "@/components/ui/Avatar";
 import { useContactSearch } from "@/data/hooks";
 import { dialogVariants } from "@/lib/motion";
@@ -75,9 +75,11 @@ function PaletteBody({ close }: { close: () => void }) {
   const [active, setActive] = useState(0);
   const navigate = useNavigate();
   const openContactForm = useUI((s) => s.openContactForm);
-  const { pipelineEnabled } = useSettings();
+  const { sides } = useSettings();
+  const side = useSide();
+  const save = useSaveSetting();
   const search = useDebounced(query, 100);
-  const { data: hits = [] } = useContactSearch(search);
+  const { data: hits = [] } = useContactSearch(search, side);
 
   const items = useMemo<Item[]>(() => {
     const go = (to: string) => () => {
@@ -87,7 +89,7 @@ function PaletteBody({ close }: { close: () => void }) {
     const pages: Item[] = [
       { id: "go-home", group: "Go to", label: "Home", icon: icon(House), run: go("/") },
       { id: "go-people", group: "Go to", label: "People", icon: icon(Users), run: go("/people") },
-      ...(pipelineEnabled
+      ...(side === "business"
         ? [{ id: "go-pipeline", group: "Go to" as const, label: "Pipeline", icon: icon(Columns3), run: go("/pipeline") }]
         : []),
       { id: "go-reminders", group: "Go to", label: "Reminders", icon: icon(Bell), run: go("/reminders") },
@@ -95,6 +97,20 @@ function PaletteBody({ close }: { close: () => void }) {
     ];
     const actions: Item[] = [
       { id: "add-person", group: "Actions", label: "Add person", icon: icon(UserPlus), run: () => openContactForm() },
+      ...(sides === "both"
+        ? [
+            {
+              id: "switch-side",
+              group: "Actions" as const,
+              label: side === "personal" ? "Switch to Business" : "Switch to Personal",
+              icon: icon(ArrowLeftRight),
+              run: () => {
+                save("activeSide", side === "personal" ? "business" : "personal");
+                close();
+              },
+            },
+          ]
+        : []),
     ];
 
     const q = query.trim().toLowerCase();
@@ -108,12 +124,12 @@ function PaletteBody({ close }: { close: () => void }) {
       detail: excerpt.toLowerCase().includes(contact.name.toLowerCase())
         ? [contact.role, contact.company].filter(Boolean).join(" at ") || undefined
         : excerpt.replace(/[[\]]/g, ""),
-      icon: <Avatar name={contact.name} size={28} />,
+      icon: <Avatar name={contact.name} contactId={contact.id} size={28} />,
       run: go(`/people/${contact.id}`),
     }));
     const matches = (item: Item) => item.label.toLowerCase().includes(q);
     return [...people, ...pages.filter(matches), ...actions.filter(matches)];
-  }, [query, search, hits, pipelineEnabled, navigate, close, openContactForm]);
+  }, [query, search, hits, side, sides, save, navigate, close, openContactForm]);
 
   useEffect(() => setActive(0), [query, items.length]);
 

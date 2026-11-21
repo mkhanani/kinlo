@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildBirthday, calendarDaysBetween, formatBirthday, parseBirthday, relativeDay } from "./dates";
+import {
+  buildBirthday,
+  calendarDaysBetween,
+  formatBirthday,
+  monthGrid,
+  parseBirthday,
+  parseTime,
+  relativeDay,
+} from "./dates";
 
 const at = (y: number, m: number, d: number, h = 12) => new Date(y, m - 1, d, h);
 
@@ -41,5 +49,34 @@ describe("birthdays", () => {
     expect(formatBirthday("1990-04-09")).toMatch(/1990/);
     expect(formatBirthday("nonsense")).toBeNull();
     expect(formatBirthday(null)).toBeNull();
+  });
+});
+
+describe("parseTime", () => {
+  it("reads the ways people type a time", () => {
+    expect(parseTime("15:30")).toEqual({ hours: 15, minutes: 30 });
+    expect(parseTime("3:30 pm")).toEqual({ hours: 15, minutes: 30 });
+    expect(parseTime("3pm")).toEqual({ hours: 15, minutes: 0 });
+    expect(parseTime("12am")).toEqual({ hours: 0, minutes: 0 });
+    expect(parseTime("12 PM")).toEqual({ hours: 12, minutes: 0 });
+    expect(parseTime("1530")).toEqual({ hours: 15, minutes: 30 });
+    expect(parseTime("9.05")).toEqual({ hours: 9, minutes: 5 });
+    expect(parseTime(" 9 ")).toEqual({ hours: 9, minutes: 0 });
+  });
+  it("refuses things that are not a time", () => {
+    for (const bad of ["", "25:00", "10:75", "13pm", "0pm", "soon", "3:3"]) expect(parseTime(bad)).toBeNull();
+  });
+});
+
+describe("monthGrid", () => {
+  it("fills whole weeks around the month", () => {
+    // February 2026 starts on a Sunday.
+    const sundayFirst = monthGrid(2026, 1, 0);
+    expect(sundayFirst).toHaveLength(28);
+    expect(sundayFirst[0]!.getDate()).toBe(1);
+    const mondayFirst = monthGrid(2026, 1, 1);
+    expect(mondayFirst).toHaveLength(35);
+    expect(mondayFirst[0]!.getMonth()).toBe(0); // starts in January
+    expect(mondayFirst[6]!.getDate()).toBe(1);
   });
 });

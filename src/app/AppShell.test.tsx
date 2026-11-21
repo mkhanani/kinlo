@@ -7,21 +7,21 @@ import { renderApp as renderShell } from "@/test/render";
 useTestDatabase();
 
 describe("app shell", () => {
-  it("shows the main navigation", () => {
-    renderShell();
+  it("shows the main navigation, with the pipeline on the business side", () => {
+    renderShell("/", { activeSide: "business" });
     const nav = screen.getByRole("navigation", { name: "Main" });
     for (const name of ["Home", "People", "Pipeline", "Reminders", "Settings"]) {
       expect(nav).toHaveTextContent(name);
     }
   });
 
-  it("hides Pipeline when it is turned off", () => {
-    renderShell("/", { pipelineEnabled: false });
+  it("hides Pipeline on the personal side", () => {
+    renderShell("/", { activeSide: "personal" });
     expect(screen.queryByRole("link", { name: "Pipeline" })).not.toBeInTheDocument();
   });
 
   it("sends a hidden Pipeline route back to Home", async () => {
-    renderShell("/pipeline", { pipelineEnabled: false });
+    renderShell("/pipeline", { sides: "personal" });
     expect(screen.queryByRole("heading", { name: "Pipeline" })).not.toBeInTheDocument();
     expect(await screen.findByText("Due for a catch-up")).toBeInTheDocument();
   });

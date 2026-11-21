@@ -1,5 +1,6 @@
 import { Clock, Bell, Cake, Columns3 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useSettings } from "@/app/settings";
 import { Page, PageHeader } from "@/components/ui/Page";
 
 function greeting() {
@@ -10,10 +11,11 @@ function greeting() {
 }
 
 export function HomePage() {
+  const { userName } = useSettings();
   const today = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
   return (
     <Page>
-      <PageHeader title={greeting()} subtitle={today} />
+      <PageHeader title={userName ? `${greeting()}, ${userName}` : greeting()} subtitle={today} />
       <div className="grid grid-cols-2 gap-3">
         <Card icon={Clock} title="Due for a catch-up" empty="Everyone is up to date." />
         <Card icon={Bell} title="Reminders this week" empty="Nothing due this week." />

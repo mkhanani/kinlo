@@ -42,7 +42,7 @@ import type { Contact, LabeledValue } from "@/data/types";
 import { formatBirthday, formatDate, relativeDay } from "@/lib/dates";
 import { openExternal } from "@/lib/external";
 import { useUI } from "@/store/ui";
-import { keepInTouchLabel, KIND_LABEL } from "./labels";
+import { keepInTouchLabel, sideLabels } from "./labels";
 import { Timeline } from "./Timeline";
 
 export function ContactPage() {
@@ -97,7 +97,7 @@ function ContactView({ contact }: { contact: Contact }) {
       <BackLink />
 
       <header className="mb-7 flex items-start gap-4">
-        <Avatar name={contact.name} size={56} />
+        <Avatar name={contact.name} contactId={contact.id} size={56} />
         <div className="min-w-0 flex-1">
           <h1 className="select-text truncate text-xl">{contact.name}</h1>
           {(contact.nickname || work) && (
@@ -106,7 +106,9 @@ function ContactView({ contact }: { contact: Contact }) {
             </p>
           )}
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            <Chip>{KIND_LABEL[contact.kind]}</Chip>
+            {sideLabels(contact).map((label) => (
+              <Chip key={label}>{label}</Chip>
+            ))}
             {contact.archived && <Chip>Archived</Chip>}
             {contact.tags.map((tag) => (
               <Chip key={tag.id}>{tag.name}</Chip>
@@ -170,7 +172,7 @@ function ContactView({ contact }: { contact: Contact }) {
           <Details contact={contact} />
           <Notes contact={contact} />
           <Reminders contactId={contact.id} />
-          <Deals contactId={contact.id} />
+          {contact.business && <Deals contactId={contact.id} />}
         </aside>
       </div>
 
@@ -324,10 +326,11 @@ function Reminders({ contactId }: { contactId: string }) {
 }
 
 function Deals({ contactId }: { contactId: string }) {
-  const { pipelineEnabled } = useSettings();
+  const { sides } = useSettings();
   const { data: deals = [] } = useContactDeals(contactId);
   const { data: stages = [] } = useStages();
-  if (!pipelineEnabled) return null;
+  // Deals are a business thing. Nothing to show for someone who only uses the personal side.
+  if (sides === "personal") return null;
   return (
     <Card title="Deals" icon={Columns3}>
       {deals.length === 0 ? (

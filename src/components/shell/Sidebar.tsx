@@ -5,7 +5,10 @@ import type { LucideIcon } from "lucide-react";
 import { Wordmark } from "@/components/Logo";
 import { useUI } from "@/store/ui";
 import { modKey } from "@/lib/platform";
-import { useSettings } from "@/app/settings";
+import { useSaveSetting, useSettings, useSide } from "@/app/settings";
+import { Segmented } from "@/components/ui/Segmented";
+import { SIDES } from "@/data/types";
+import { SIDE_LABEL } from "@/features/people/labels";
 
 interface Item {
   to: string;
@@ -15,7 +18,10 @@ interface Item {
 }
 
 export function Sidebar() {
-  const { pipelineEnabled } = useSettings();
+  const { sides } = useSettings();
+  const side = useSide();
+  const save = useSaveSetting();
+  const resetPeopleFilter = useUI((s) => s.setPeopleFilter);
   const toggleAssistant = useUI((s) => s.toggleAssistant);
   const assistantOpen = useUI((s) => s.assistantOpen);
   const setPaletteOpen = useUI((s) => s.setPaletteOpen);
@@ -23,7 +29,8 @@ export function Sidebar() {
   const items: Item[] = [
     { to: "/", label: "Home", icon: House, shortcut: "1" },
     { to: "/people", label: "People", icon: Users, shortcut: "2" },
-    ...(pipelineEnabled ? [{ to: "/pipeline", label: "Pipeline", icon: Columns3, shortcut: "3" }] : []),
+    // The pipeline belongs to the business side.
+    ...(side === "business" ? [{ to: "/pipeline", label: "Pipeline", icon: Columns3, shortcut: "3" }] : []),
     { to: "/reminders", label: "Reminders", icon: Bell, shortcut: "4" },
   ];
 
@@ -32,6 +39,21 @@ export function Sidebar() {
       <div className="px-2 pb-4 pt-1">
         <Wordmark />
       </div>
+
+      {sides === "both" && (
+        <div className="mb-3 [&>div]:flex [&>div]:w-full [&_button]:flex-1">
+          <Segmented
+            label="Side"
+            value={side}
+            onChange={(next) => {
+              save("activeSide", next);
+              // A kind filter from the business side means nothing on the personal one.
+              resetPeopleFilter({ business: "all", tagId: null });
+            }}
+            options={SIDES.map((s) => ({ value: s, label: SIDE_LABEL[s] }))}
+          />
+        </div>
+      )}
 
       <button
         onClick={() => setPaletteOpen(true)}

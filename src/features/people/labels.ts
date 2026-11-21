@@ -1,13 +1,25 @@
 import { CalendarDays, Mail, MessageSquare, NotebookPen, Phone } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { ContactKind, InteractionType } from "@/data/types";
+import type { BusinessKind, Contact, InteractionType, Side } from "@/data/types";
 
-export const KIND_LABEL: Record<ContactKind, string> = {
+export const SIDE_LABEL: Record<Side, string> = {
   personal: "Personal",
-  client: "Client",
+  business: "Business",
+};
+
+export const BUSINESS_LABEL: Record<BusinessKind, string> = {
   lead: "Lead",
+  client: "Client",
   other: "Other",
 };
+
+/** Short labels for where a person sits: "Personal", "Client", or both. */
+export function sideLabels(contact: Pick<Contact, "personal" | "business">): string[] {
+  const labels: string[] = [];
+  if (contact.personal) labels.push("Personal");
+  if (contact.business) labels.push(contact.business === "other" ? "Business" : BUSINESS_LABEL[contact.business]);
+  return labels;
+}
 
 export const INTERACTION: Record<InteractionType, { label: string; icon: LucideIcon }> = {
   call: { label: "Call", icon: Phone },

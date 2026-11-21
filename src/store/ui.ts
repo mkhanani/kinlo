@@ -1,9 +1,10 @@
 import { create } from "zustand";
-import type { ContactKind } from "@/data/types";
+import type { BusinessKind } from "@/data/types";
 
 export interface PeopleFilter {
   search: string;
-  kind: ContactKind | "all";
+  /** Business side only: narrow to leads, clients or other work contacts. */
+  business: BusinessKind | "all";
   tagId: string | null;
   overdueOnly: boolean;
   includeArchived: boolean;
@@ -11,7 +12,7 @@ export interface PeopleFilter {
 
 export const EMPTY_PEOPLE_FILTER: PeopleFilter = {
   search: "",
-  kind: "all",
+  business: "all",
   tagId: null,
   overdueOnly: false,
   includeArchived: false,

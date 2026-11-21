@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { addInteraction, createContact, getContact, listContacts, listInteractions, setContactTags } from "@/data";
+import {
+  addInteraction,
+  createContact,
+  getContact,
+  listContacts,
+  listInteractions,
+  listTags,
+  loadSettings,
+  setContactTags,
+} from "@/data";
 import { useTestDatabase } from "@/data/testing";
 import { renderApp } from "@/test/render";
 
@@ -8,6 +17,13 @@ useTestDatabase();
 
 const type = (element: HTMLElement, value: string) => fireEvent.change(element, { target: { value } });
 const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+
+/** Opens a dropdown menu the way a keyboard user would, then picks an item. */
+async function pickFromMenu(trigger: HTMLElement, item: string | RegExp) {
+  trigger.focus();
+  fireEvent.keyDown(trigger, { key: "Enter" });
+  fireEvent.click(await screen.findByRole("menuitem", { name: item }));
+}
 
 describe("People list", () => {
   it("starts empty with one clear action", async () => {
@@ -65,17 +81,17 @@ describe("People list", () => {
     expect(await screen.findByText("Marcus Bell")).toBeInTheDocument();
   });
 
-  it("filters by kind and hides archived people until asked", async () => {
-    await createContact({ name: "Client Carla", kind: "client" });
-    await createContact({ name: "Friend Farid", kind: "personal" });
-    await createContact({ name: "Old Olga", archived: true });
+  it("on the business side, filters by kind and hides archived people until asked", async () => {
+    await createContact({ name: "Client Carla", business: "client" });
+    await createContact({ name: "Lead Lars", business: "lead" });
+    await createContact({ name: "Old Olga", business: "client", archived: true });
 
-    renderApp("/people");
+    renderApp("/people", { activeSide: "business" });
     await screen.findByText("Client Carla");
     expect(screen.queryByText("Old Olga")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("radio", { name: "Client" }));
-    await waitFor(() => expect(screen.queryByText("Friend Farid")).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("radio", { name: "Clients" }));
+    await waitFor(() => expect(screen.queryByText("Lead Lars")).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("radio", { name: "All" }));
     fireEvent.click(screen.getByRole("button", { name: "Archived" }));
@@ -112,6 +128,43 @@ describe("Adding and editing a person", () => {
       keep_in_touch_days: 30,
     });
     expect(saved!.tags.map((t) => t.name)).toEqual(["Clients"]);
+    // Added from the personal side, so that is where they are.
+    expect(saved).toMatchObject({ personal: true, business: null });
+  });
+
+  it("on the business side a new person is a lead unless you say otherwise, and can be on both", async () => {
+    renderApp("/people", { activeSide: "business" });
+    fireEvent.click((await screen.findAllByRole("button", { name: /Add person/ }))[0]!);
+    const dialog = await screen.findByRole("dialog");
+
+    type(within(dialog).getByLabelText("Name"), "Dana Whitfield");
+    expect(within(dialog).getByRole("button", { name: "Business" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("button", { name: "Personal" })).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Client" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Personal" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add person" }));
+
+    await screen.findByRole("heading", { name: "Dana Whitfield" });
+    expect((await listContacts())[0]).toMatchObject({ personal: true, business: "client" });
+  });
+
+  it("will not save someone who is on neither side", async () => {
+    renderApp("/people");
+    fireEvent.click((await screen.findAllByRole("button", { name: /Add person/ }))[0]!);
+    const dialog = await screen.findByRole("dialog");
+    type(within(dialog).getByLabelText("Name"), "Nobody Nowhere");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Personal" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add person" }));
+    expect(await within(dialog).findByText("Choose Personal, Business, or both.")).toBeInTheDocument();
+    expect(await listContacts()).toEqual([]);
+  });
+
+  it("hides the side choice when only one side is switched on", async () => {
+    renderApp("/people", { sides: "personal" });
+    fireEvent.click((await screen.findAllByRole("button", { name: /Add person/ }))[0]!);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByText("Shows on")).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("radiogroup", { name: "Business kind" })).not.toBeInTheDocument();
   });
 
   it("asks for a name and refuses a date that does not exist", async () => {
@@ -199,6 +252,182 @@ describe("A person's page", () => {
   it("says so when the person does not exist", async () => {
     renderApp("/people/not-a-real-id");
     expect(await screen.findByText("This person is not here any more.")).toBeInTheDocument();
+  });
+});
+
+describe("The two sides", () => {
+  it("each side lists its own people, and someone on both appears on both", async () => {
+    await createContact({ name: "Friend Farid" });
+    await createContact({ name: "Client Carla", business: "client" });
+    await createContact({ name: "Both Bea", personal: true, business: "lead" });
+
+    renderApp("/people", { activeSide: "personal" });
+    await screen.findByText("Friend Farid");
+    expect(screen.getByText("Both Bea")).toBeInTheDocument();
+    expect(screen.queryByText("Client Carla")).not.toBeInTheDocument();
+    expect(screen.getByText("2 people")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Pipeline" })).not.toBeInTheDocument();
+
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Side" })).getByRole("radio", { name: "Business" }));
+    expect(await screen.findByText("Client Carla")).toBeInTheDocument();
+    expect(screen.getByText("Both Bea")).toBeInTheDocument();
+    expect(screen.queryByText("Friend Farid")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Pipeline" })).toBeInTheDocument();
+    await waitFor(async () => expect((await loadSettings()).activeSide).toBe("business"));
+  });
+
+  it("shows no switch when only one side is in use", async () => {
+    renderApp("/people", { sides: "business" });
+    await screen.findByText(/No business contacts yet/);
+    expect(screen.queryByRole("radiogroup", { name: "Side" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Pipeline" })).toBeInTheDocument();
+  });
+
+  it("the palette only finds people on the side you are on", async () => {
+    await createContact({ name: "Jordan Friend" });
+    await createContact({ name: "Jordan Client", business: "client" });
+    renderApp("/", { activeSide: "business" });
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    type(await screen.findByRole("combobox"), "jordan");
+    expect(await screen.findByRole("option", { name: /Jordan Client/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Jordan Friend/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("Menus and destructive actions", () => {
+  it("archives and unarchives from a person's menu", async () => {
+    const ana = await createContact({ name: "Ana Lima" });
+    renderApp(`/people/${ana.id}`);
+    await pickFromMenu(await screen.findByRole("button", { name: "More" }), /^Archive/);
+    await waitFor(async () => expect((await getContact(ana.id))!.archived).toBe(true));
+    expect(await screen.findByText("Archived")).toBeInTheDocument();
+
+    await pickFromMenu(screen.getByRole("button", { name: "More" }), /Unarchive/);
+    await waitFor(async () => expect((await getContact(ana.id))!.archived).toBe(false));
+  });
+
+  it("deleting a person asks first, and cancelling keeps them", async () => {
+    const ana = await createContact({ name: "Ana Lima" });
+    renderApp(`/people/${ana.id}`);
+
+    await pickFromMenu(await screen.findByRole("button", { name: "More" }), /Delete/);
+    const confirm = await screen.findByRole("dialog", { name: "Delete Ana Lima?" });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(await getContact(ana.id)).not.toBeNull();
+
+    await pickFromMenu(screen.getByRole("button", { name: "More" }), /Delete/);
+    fireEvent.click(within(await screen.findByRole("dialog", { name: "Delete Ana Lima?" })).getByRole("button", { name: "Delete" }));
+    await waitFor(async () => expect(await getContact(ana.id)).toBeNull());
+    // Back on the list, which is now empty.
+    expect(await screen.findByText("Nobody here yet. Add your first person.")).toBeInTheDocument();
+  });
+
+  it("edits and deletes a timeline entry from its menu", async () => {
+    const ana = await createContact({ name: "Ana Lima" });
+    await addInteraction({ contact_id: ana.id, type: "call", happened_at: daysAgo(2), summary: "First draft" });
+    renderApp(`/people/${ana.id}`);
+    await screen.findByText("First draft");
+
+    await pickFromMenu(screen.getByRole("button", { name: "Call options" }), "Edit");
+    const box = await screen.findByDisplayValue("First draft");
+    type(box, "Final wording");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    // Wait for the edit box to close, then the entry shows the new text.
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument());
+    expect(await screen.findByText("Final wording")).toBeInTheDocument();
+
+    await pickFromMenu(await screen.findByRole("button", { name: "Call options" }), "Delete");
+    fireEvent.click(within(await screen.findByRole("dialog", { name: "Delete this call?" })).getByRole("button", { name: "Delete" }));
+    await waitFor(async () => expect(await listInteractions(ana.id)).toEqual([]));
+    await waitFor(async () => expect((await getContact(ana.id))!.last_contacted_at).toBeNull());
+  });
+
+  it("filters by tag from the tag menu, and manages tags", async () => {
+    const ana = await createContact({ name: "Ana Lima" });
+    const bo = await createContact({ name: "Bo Chen" });
+    await setContactTags(ana.id, ["Friends"]);
+    await setContactTags(bo.id, ["Climbing"]);
+    renderApp("/people");
+    await screen.findByText("Bo Chen");
+
+    await pickFromMenu(screen.getByRole("button", { name: "Tag filter" }), /Friends/);
+    await waitFor(() => expect(screen.queryByText("Bo Chen")).not.toBeInTheDocument());
+    expect(screen.getByRole("link", { name: /Ana Lima/ })).toBeInTheDocument();
+
+    await pickFromMenu(screen.getByRole("button", { name: "Tag filter: Friends" }), "Manage tags");
+    const dialog = await screen.findByRole("dialog", { name: "Tags" });
+
+    // A name that is already taken is refused.
+    fireEvent.click(within(dialog).getByRole("button", { name: "Rename Friends" }));
+    const input = within(dialog).getByLabelText("New name for Friends");
+    type(input, "climbing");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(await within(dialog).findByText("There is already a tag with that name.")).toBeInTheDocument();
+
+    type(input, "Close friends");
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(async () => expect((await listTags()).map((t) => t.name)).toEqual(["Climbing", "Close friends"]));
+
+    // Deleting the tag the list is filtered by clears the filter and keeps the person.
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Delete Close friends" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete tag" }));
+    await waitFor(async () => expect((await listTags()).map((t) => t.name)).toEqual(["Climbing"]));
+    expect(await getContact(ana.id)).not.toBeNull();
+    expect(await screen.findByText("Bo Chen")).toBeInTheDocument();
+  });
+});
+
+describe("Choosing when something happened", () => {
+  it("logs for now by default, or for a day and time you pick", async () => {
+    const ana = await createContact({ name: "Ana Lima" });
+    renderApp(`/people/${ana.id}`);
+
+    fireEvent.click(await screen.findByRole("button", { name: "When: Now" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Yesterday" }));
+    const time = screen.getByLabelText("Time");
+    type(time, "3:30pm");
+    fireEvent.keyDown(time, { key: "Enter" });
+    expect(await screen.findByRole("button", { name: "When: Yesterday, 3:30 PM" })).toBeInTheDocument();
+
+    type(screen.getByLabelText("Summary"), "Yesterday's call");
+    fireEvent.click(screen.getByRole("button", { name: "Log call" }));
+    await screen.findByText("Yesterday's call");
+
+    const [logged] = await listInteractions(ana.id);
+    const when = new Date(logged!.happened_at);
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    expect([when.getDate(), when.getHours(), when.getMinutes()]).toEqual([yesterday.getDate(), 15, 30]);
+    // Ready for the next one, back at "now".
+    expect(screen.getByRole("button", { name: "When: Now" })).toBeInTheDocument();
+  });
+
+  it("does not offer days that have not happened yet", async () => {
+    const ana = await createContact({ name: "Ana Lima" });
+    renderApp(`/people/${ana.id}`);
+    fireEvent.click(await screen.findByRole("button", { name: "When: Now" }));
+    const grid = await screen.findByRole("grid");
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const label = tomorrow.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+    const cell = within(grid).queryByRole("button", { name: label });
+    // Tomorrow may fall outside the weeks shown at the very end of a month's grid.
+    if (cell) expect(cell).toBeDisabled();
+  });
+
+  it("a note does not count as being in touch", async () => {
+    const ingrid = await createContact({ name: "Ingrid Solberg", keep_in_touch_days: 7 });
+    await addInteraction({ contact_id: ingrid.id, type: "call", happened_at: daysAgo(16) });
+    renderApp(`/people/${ingrid.id}`);
+    await screen.findByText("9 days overdue");
+
+    fireEvent.click(screen.getByRole("radio", { name: "Note" }));
+    type(screen.getByLabelText("Summary"), "Ask about the move");
+    fireEvent.click(screen.getByRole("button", { name: "Log note" }));
+
+    expect(await screen.findByText("Ask about the move")).toBeInTheDocument();
+    expect(screen.getByText("9 days overdue")).toBeInTheDocument();
   });
 });
 

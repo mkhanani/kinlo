@@ -97,3 +97,46 @@ export function formatBirthday(value: string | null | undefined): string | null 
 export const MONTHS = Array.from({ length: 12 }, (_, i) =>
   new Date(2000, i, 1).toLocaleDateString(undefined, { month: "long" }),
 );
+
+/**
+ * Reads a time the way people type it: "15:30", "3:30 pm", "3pm", "1530", "9".
+ * Returns null when it cannot be read as a time of day.
+ */
+export function parseTime(input: string): { hours: number; minutes: number } | null {
+  const match = /^\s*(\d{1,2})(?:[:.\s]?(\d{2}))?\s*(a|am|p|pm)?\s*$/i.exec(input.replace(/\./g, ":").replace(/::/g, ":"));
+  if (!match) return null;
+  let hours = Number(match[1]);
+  const minutes = match[2] ? Number(match[2]) : 0;
+  const meridiem = match[3]?.toLowerCase()[0];
+  if (meridiem) {
+    if (hours < 1 || hours > 12) return null;
+    if (meridiem === "p" && hours !== 12) hours += 12;
+    if (meridiem === "a" && hours === 12) hours = 0;
+  }
+  if (hours > 23 || minutes > 59) return null;
+  return { hours, minutes };
+}
+
+/** The first day of the week where the user is: 0 for Sunday, 1 for Monday, and so on. */
+export function firstDayOfWeek(): number {
+  try {
+    const locale = new Intl.Locale(navigator.language) as Intl.Locale & {
+      getWeekInfo?: () => { firstDay: number };
+      weekInfo?: { firstDay: number };
+    };
+    const first = locale.getWeekInfo?.().firstDay ?? locale.weekInfo?.firstDay;
+    if (first) return first % 7;
+  } catch {
+    // Older engines: fall through.
+  }
+  return 1;
+}
+
+/** The days shown for a month: whole weeks, so it may start and end in neighbouring months. */
+export function monthGrid(year: number, month: number, weekStart: number): Date[] {
+  const first = new Date(year, month, 1);
+  const lead = (first.getDay() - weekStart + 7) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = Math.ceil((lead + daysInMonth) / 7) * 7;
+  return Array.from({ length: cells }, (_, i) => new Date(year, month, 1 - lead + i));
+}

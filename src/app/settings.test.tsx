@@ -18,9 +18,9 @@ function Probe() {
   useThemeSync();
   return (
     <div>
-      <output>{`${settings.theme}/${settings.pipelineEnabled}`}</output>
+      <output>{`${settings.theme}/${settings.sides}`}</output>
       <button onClick={() => save("theme", "light")}>light</button>
-      <button onClick={() => save("pipelineEnabled", false)}>hide</button>
+      <button onClick={() => save("sides", "personal")}>hide</button>
     </div>
   );
 }
@@ -36,15 +36,15 @@ describe("settings in the app", () => {
   it("reads saved settings from the database", async () => {
     await saveSetting("theme", "dark");
     renderProbe();
-    expect(await screen.findByText("dark/true")).toBeInTheDocument();
+    expect(await screen.findByText("dark/both")).toBeInTheDocument();
   });
 
   it("saving updates the screen and the database", async () => {
     renderProbe();
-    await screen.findByText("system/true");
+    await screen.findByText("system/both");
     act(() => screen.getByText("hide").click());
-    expect(await screen.findByText("system/false")).toBeInTheDocument();
-    await waitFor(async () => expect((await loadSettings()).pipelineEnabled).toBe(false));
+    expect(await screen.findByText("system/personal")).toBeInTheDocument();
+    await waitFor(async () => expect((await loadSettings()).sides).toBe("personal"));
   });
 
   it("applies the chosen theme to the document", async () => {

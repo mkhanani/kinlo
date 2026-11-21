@@ -4,13 +4,14 @@ import { AnimatePresence, motion } from "motion/react";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Input, Textarea } from "@/components/ui/Field";
+import { DateTimeField } from "@/components/ui/DateTimeField";
+import { Textarea } from "@/components/ui/Field";
 import { Menu, MenuItem } from "@/components/ui/Menu";
 import { Segmented } from "@/components/ui/Segmented";
 import { useAddInteraction, useDeleteInteraction, useInteractions, useUpdateInteraction } from "@/data/hooks";
 import { INTERACTION_TYPES } from "@/data/types";
 import type { Interaction, InteractionType } from "@/data/types";
-import { formatDate, formatTime, fromDateTimeLocal, relativeDay, toDateTimeLocal } from "@/lib/dates";
+import { formatDate, formatTime, relativeDay } from "@/lib/dates";
 import { ease } from "@/lib/motion";
 import { modKey } from "@/lib/platform";
 import { INTERACTION } from "./labels";
@@ -61,18 +62,18 @@ export function Timeline({ contactId, firstName }: { contactId: string; firstNam
 function Composer({ contactId }: { contactId: string }) {
   const [type, setType] = useState<InteractionType>("call");
   const [summary, setSummary] = useState("");
-  // Empty means "now", so a quick log never carries a stale time.
-  const [when, setWhen] = useState("");
+  // null means "now", so a quick log never carries a stale time.
+  const [when, setWhen] = useState<string | null>(null);
   const add = useAddInteraction();
 
   const submit = () => {
     if (add.isPending) return;
     add.mutate(
-      { contact_id: contactId, type, summary, happened_at: fromDateTimeLocal(when) ?? undefined },
+      { contact_id: contactId, type, summary, happened_at: when ?? undefined },
       {
         onSuccess: () => {
           setSummary("");
-          setWhen("");
+          setWhen(null);
         },
       },
     );
@@ -96,15 +97,7 @@ function Composer({ contactId }: { contactId: string }) {
         placeholder={PROMPT[type]}
       />
       <div className="flex items-center gap-2">
-        <Input
-          type="datetime-local"
-          aria-label="When"
-          value={when}
-          max={toDateTimeLocal(new Date().toISOString())}
-          onChange={(e) => setWhen(e.target.value)}
-          className="!w-[210px] text-sm"
-        />
-        <span className="text-xs text-subtle">{when ? "" : "Leave empty for now"}</span>
+        <DateTimeField label="When" value={when} onChange={setWhen} allowNow pastOnly />
         <span className="ml-auto text-xs text-subtle">{modKey} Enter</span>
         <Button variant="primary" onClick={submit} disabled={add.isPending}>
           Log {INTERACTION[type].label.toLowerCase()}
@@ -182,11 +175,11 @@ function Entry({ interaction }: { interaction: Interaction }) {
 function EditEntry({ interaction, onDone }: { interaction: Interaction; onDone: () => void }) {
   const [type, setType] = useState(interaction.type);
   const [summary, setSummary] = useState(interaction.summary);
-  const [when, setWhen] = useState(toDateTimeLocal(interaction.happened_at));
+  const [when, setWhen] = useState<string | null>(interaction.happened_at);
   const update = useUpdateInteraction();
 
   const save = () => {
-    const happened_at = fromDateTimeLocal(when) ?? interaction.happened_at;
+    const happened_at = when ?? interaction.happened_at;
     update.mutate({ interaction, patch: { type, summary, happened_at } }, { onSuccess: onDone });
   };
 
@@ -195,13 +188,7 @@ function EditEntry({ interaction, onDone }: { interaction: Interaction; onDone: 
       <Segmented label="Type" value={type} onChange={setType} options={TYPE_OPTIONS} />
       <Textarea aria-label="Summary" rows={3} autoFocus value={summary} onChange={(e) => setSummary(e.target.value)} />
       <div className="flex items-center gap-2">
-        <Input
-          type="datetime-local"
-          aria-label="When"
-          value={when}
-          onChange={(e) => setWhen(e.target.value)}
-          className="!w-[210px] text-sm"
-        />
+        <DateTimeField label="When" value={when} onChange={setWhen} pastOnly />
         <Button variant="ghost" className="ml-auto" onClick={onDone}>
           Cancel
         </Button>
