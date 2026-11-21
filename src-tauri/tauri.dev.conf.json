@@ -8,6 +8,11 @@
       "icons/staging/128x128@2x.png",
       "icons/staging/icon.icns",
       "icons/staging/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/staging/icon.ico"
+      }
+    }
   }
 }

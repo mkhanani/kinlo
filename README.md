@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/kinlo-icon.svg" width="96" height="96" alt="kinlo">
+  <img src="assets/icon/app.svg" width="96" height="96" alt="kinlo">
 </p>
 
 <h1 align="center">kinlo</h1>
