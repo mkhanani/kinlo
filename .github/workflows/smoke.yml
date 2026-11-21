@@ -100,4 +100,14 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -q -m "Smoke results: ${{ matrix.name }} at ${GITHUB_SHA::7}"
-          git push -q -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "results:refs/heads/smoke-results/${{ matrix.slug }}"
+          # Several runs can finish at once (a push to staging and the pull requests built
+          # from it) and all publish to the same branch. Whichever lands last wins, which
+          # is fine for "the latest screenshots", so a lost race is retried and never
+          # fails the run. The screenshots are attached to the run either way.
+          for attempt in 1 2 3; do
+            if git push -q -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "results:refs/heads/smoke-results/${{ matrix.slug }}"; then
+              exit 0
+            fi
+            sleep $((attempt * 5))
+          done
+          echo "::warning::Could not publish the screenshots branch because another run was publishing at the same time. They are attached to this run."
