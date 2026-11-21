@@ -15,13 +15,17 @@ export interface OnboardingResult {
   sides: SidesChoice;
   activeSide: Side;
   userName: string | null;
-  /** Where the bleed starts, and in which colour. */
+  /** Where the bleed starts, in which colour, and the app background it settles into. */
   origin: BleedOrigin;
   color: string;
+  settleTo: string;
 }
 
 /** The two halves are fixed colours whatever the theme: personal is light, business is dark. */
 export const SIDE_COLOR: Record<Side, string> = { personal: "#f6f6f5", business: "#0a0a0b" };
+
+/** Both sides together: the grey halfway between the two, so it shows over either half. */
+export const BOTH_COLOR = "#7f7f82";
 
 const STEPS = ["welcome", "name", "theme", "sides"] as const;
 type Step = (typeof STEPS)[number];
@@ -56,7 +60,8 @@ export function Onboarding({ onChoose }: { onChoose: (result: OnboardingResult) 
       activeSide: sides === "business" ? "business" : "personal",
       userName: name.trim() || null,
       origin,
-      color: sides === "both" ? background : SIDE_COLOR[sides],
+      color: sides === "both" ? BOTH_COLOR : SIDE_COLOR[sides],
+      settleTo: background,
     });
   };
 

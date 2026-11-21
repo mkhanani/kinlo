@@ -2,8 +2,10 @@ import { useEffect, useMemo } from "react";
 import { motion, useReducedMotionConfig } from "motion/react";
 
 /**
- * The bleed: a colour that spreads across the whole window like ink, covers it, and then
- * fades away to show what is underneath.
+ * The bleed: a colour that spreads across the whole window like ink and covers it. While
+ * the window is covered the colour settles into the app's own background, and then the
+ * whole thing fades away to show what is underneath. Settling first means a light bleed
+ * never flashes against a dark app, or the other way round.
  *
  *   from a point      spreads outwards from where you clicked
  *   from the bottom   rises from the bottom edge to the top
@@ -12,8 +14,14 @@ export type BleedOrigin = { kind: "point"; x: number; y: number } | { kind: "bot
 
 export interface BleedSpec {
   origin: BleedOrigin;
+  /** The colour that spreads. */
   color: string;
+  /** The app's background, which the colour settles into before it clears. */
+  settleTo: string;
 }
+
+const SETTLE = 0.32;
+const CLEAR = 0.45;
 
 interface Props {
   spec: BleedSpec;
@@ -44,15 +52,20 @@ export function Bleed({ spec, phase, onCovered, onCleared }: Props) {
     return () => clearTimeout(timer);
   }, [reduced, phase, onCovered]);
 
+  const clearing = phase === "clearing";
+  // Nothing to settle when the bleed is already the colour of the app.
+  const settles = !reduced && spec.color.toLowerCase() !== spec.settleTo.toLowerCase();
+
   return (
     <motion.div
       aria-hidden
       className="pointer-events-none fixed inset-0 z-[100] overflow-hidden"
       initial={{ opacity: reduced ? 0 : 1 }}
-      animate={{ opacity: phase === "clearing" ? 0 : 1 }}
-      transition={{ duration: phase === "clearing" ? 0.45 : 0.2, ease: "easeOut" }}
-      onAnimationComplete={() => phase === "clearing" && onCleared()}
-      style={reduced ? { background: spec.color } : undefined}
+      animate={{ opacity: clearing ? 0 : 1 }}
+      transition={{ duration: clearing ? CLEAR : 0.2, delay: clearing && settles ? SETTLE : 0, ease: "easeOut" }}
+      onAnimationComplete={() => clearing && onCleared()}
+      // With less motion there is no spreading colour, only a fade to the app's background and back.
+      style={reduced ? { background: spec.settleTo } : undefined}
     >
       {!reduced &&
         (spec.origin.kind === "point" ? (
@@ -60,6 +73,15 @@ export function Bleed({ spec, phase, onCovered, onCleared }: Props) {
         ) : (
           <FromBottom w={w} h={h} color={spec.color} onCovered={onCovered} />
         ))}
+      {settles && (
+        <motion.div
+          className="absolute inset-0"
+          style={{ background: spec.settleTo }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: clearing ? 1 : 0 }}
+          transition={{ duration: SETTLE, ease: "easeInOut" }}
+        />
+      )}
     </motion.div>
   );
 }

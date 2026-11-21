@@ -21,7 +21,7 @@ export function Root() {
   const begin = (result: OnboardingResult) => {
     if (pending.current) return;
     pending.current = result;
-    setBleed({ spec: { origin: result.origin, color: result.color }, phase: "covering" });
+    setBleed({ spec: { origin: result.origin, color: result.color, settleTo: result.settleTo }, phase: "covering" });
   };
 
   // The window is covered: save the answers and swap in the app behind the colour.
