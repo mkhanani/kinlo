@@ -6,6 +6,7 @@ import { Root } from "@/app/Root";
 import { createQueryClient } from "@/app/queryClient";
 import { settingsKey } from "@/app/settings";
 import { DEFAULT_SETTINGS, type Settings } from "@/data";
+import { resetChat } from "@/ai/chat";
 import { EMPTY_PEOPLE_FILTER, useUI } from "@/store/ui";
 
 /** Renders the whole app at a route, the way main.tsx does, on the current test database. */
@@ -19,6 +20,7 @@ export function renderApp(path = "/", settings: Partial<Settings> = {}) {
     peopleFilter: EMPTY_PEOPLE_FILTER,
   });
   localStorage.clear();
+  resetChat();
   const client = createQueryClient();
   // The real app loads settings before its first render. Do the same here.
   client.setQueryData(settingsKey, { ...DEFAULT_SETTINGS, onboarded: true, ...settings });

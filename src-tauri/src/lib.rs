@@ -1,8 +1,11 @@
 mod background;
 mod channel;
 mod db;
+mod keychain;
 mod notifier;
 mod window;
+
+use std::sync::Arc;
 
 use channel::Channel;
 use tauri::Manager;
@@ -37,17 +40,23 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec![background::HIDDEN_ARG]),
         ))
         .manage(notifier::Schedule::default())
         .manage(background::Background::default())
+        .manage(keychain::Keys(Arc::new(keychain::SystemKeychain::new(
+            channel.keychain_service(),
+        ))))
         .invoke_handler(tauri::generate_handler![
             notifier::schedule_notifications,
             notifier::notify_now,
             background::set_run_in_background,
             background::quit_app,
+            keychain::set_key,
+            keychain::get_key,
         ])
         .setup(move |app| {
             if let Some(main) = app.get_webview_window("main") {

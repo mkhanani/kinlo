@@ -159,6 +159,8 @@ await sleep(400);
 press("enter"); // name
 await sleep(1500);
 press("enter"); // look
+await sleep(1500);
+press("enter"); // assistant: not now
 await sleep(1800);
 shot("2-sides");
 type("b"); // I want both

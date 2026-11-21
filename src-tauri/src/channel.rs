@@ -49,7 +49,6 @@ impl Channel {
 
     /// Keychain service name. Separate per channel so a staging build can never read or
     /// overwrite the API keys of the production app.
-    #[allow(dead_code)] // used by the keychain commands in step 6
     pub fn keychain_service(self) -> &'static str {
         match self {
             Channel::Dev => "app.kinlo.desktop.dev",
