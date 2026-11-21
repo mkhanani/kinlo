@@ -4,12 +4,15 @@ import { TitleBar } from "@/components/shell/TitleBar";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { AssistantPanel } from "@/components/shell/AssistantPanel";
 import { CommandPalette } from "@/components/shell/CommandPalette";
+import { ShortcutsDialog } from "@/components/shell/ShortcutsDialog";
 import { HomePage } from "@/pages/Home";
 import { ContactFormDialog } from "@/features/people/ContactFormDialog";
 import { PeopleRoutes } from "@/features/people/PeopleRoutes";
 import { PipelinePage } from "@/pages/Pipeline";
 import { DealFormDialog } from "@/features/pipeline/DealFormDialog";
+import { StagesDialog } from "@/features/pipeline/StagesDialog";
 import { ReminderFormDialog } from "@/features/reminders/ReminderFormDialog";
+import { ImportDialog } from "@/features/transfer/ImportDialog";
 import { RemindersPage } from "@/pages/Reminders";
 import { SettingsPage } from "@/pages/Settings";
 import { pageVariants } from "@/lib/motion";
@@ -56,6 +59,9 @@ export function AppShell() {
       <ContactFormDialog />
       <ReminderFormDialog />
       <DealFormDialog />
+      <ImportDialog />
+      <StagesDialog />
+      <ShortcutsDialog />
     </div>
   );
 }

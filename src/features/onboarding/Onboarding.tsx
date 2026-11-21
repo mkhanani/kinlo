@@ -9,7 +9,9 @@ import { LogoMark } from "@/components/Logo";
 import { TitleBar } from "@/components/shell/TitleBar";
 import { Button } from "@/components/ui/Button";
 import type { AiProvider, SidesChoice, ThemePref } from "@/data/settings";
+import type { ImportRow } from "@/data/transfer";
 import type { Side } from "@/data/types";
+import { chooseContactsFile } from "@/features/transfer/ImportDialog";
 import { ease } from "@/lib/motion";
 import type { BleedOrigin } from "./Bleed";
 
@@ -17,6 +19,8 @@ export interface OnboardingResult {
   sides: SidesChoice;
   activeSide: Side;
   userName: string | null;
+  /** People read from a contacts file during setup, to add once a side has been chosen. */
+  importRows: ImportRow[];
   /** Where the bleed starts, in which colour, and the app background it settles into. */
   origin: BleedOrigin;
   color: string;
@@ -29,7 +33,7 @@ export const SIDE_COLOR: Record<Side, string> = { personal: "#f6f6f5", business:
 /** Both sides together: the grey halfway between the two, so it shows over either half. */
 export const BOTH_COLOR = "#7f7f82";
 
-const STEPS = ["welcome", "name", "theme", "assistant", "sides"] as const;
+const STEPS = ["welcome", "name", "theme", "assistant", "people", "sides"] as const;
 type Step = (typeof STEPS)[number];
 
 /**
@@ -42,6 +46,7 @@ export function Onboarding({ onChoose }: { onChoose: (result: OnboardingResult) 
   const [index, setIndex] = useState(0);
   const [direction, setDirection] = useState(1);
   const [name, setName] = useState(settings.userName ?? "");
+  const [incoming, setIncoming] = useState<Incoming | null>(null);
   const step: Step = STEPS[index]!;
 
   const go = useCallback((to: number) => {
@@ -61,6 +66,7 @@ export function Onboarding({ onChoose }: { onChoose: (result: OnboardingResult) 
       // With both switched on, start on the personal side.
       activeSide: sides === "business" ? "business" : "personal",
       userName: name.trim() || null,
+      importRows: incoming?.rows ?? [],
       origin,
       color: sides === "both" ? BOTH_COLOR : SIDE_COLOR[sides],
       settleTo: background,
@@ -95,6 +101,7 @@ export function Onboarding({ onChoose }: { onChoose: (result: OnboardingResult) 
               <ThemeStep number={index} value={settings.theme} onPick={(theme) => save("theme", theme)} onNext={next} />
             )}
             {step === "assistant" && <AssistantStep number={index} onNext={next} />}
+            {step === "people" && <PeopleStep number={index} incoming={incoming} setIncoming={setIncoming} onNext={next} />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -325,6 +332,76 @@ function AssistantStep({ number, onNext }: { number: number; onNext: () => void 
       <div className="mt-6 flex items-center gap-3">
         <Button variant="primary" onClick={finish} className="!h-9 !px-4">
           {choice ? "OK" : "Skip"} <Check size={15} strokeWidth={1.75} />
+        </Button>
+        <EnterHint />
+      </div>
+    </Question>
+  );
+}
+
+interface Incoming {
+  file: string;
+  rows: ImportRow[];
+}
+
+/**
+ * Optional: bring contacts in from a file. The file is only read here. The people are
+ * added at the end, once it is known which side of kinlo they belong on.
+ */
+function PeopleStep({
+  number,
+  incoming,
+  setIncoming,
+  onNext,
+}: {
+  number: number;
+  incoming: Incoming | null;
+  setIncoming: (value: Incoming | null) => void;
+  onNext: () => void;
+}) {
+  const [problem, setProblem] = useState<string | null>(null);
+  useEnter(onNext);
+
+  const choose = async () => {
+    const result = await chooseContactsFile();
+    if (!result) return;
+    if ("problem" in result) {
+      setProblem(result.problem);
+      return;
+    }
+    setProblem(null);
+    setIncoming({ file: result.file, rows: result.rows });
+  };
+
+  return (
+    <Question
+      number={number}
+      title="Bring your people with you?"
+      detail="Optional. If you have your contacts as a CSV file, from Google Contacts or Outlook for example, kinlo can add them. You can also do this later in Settings."
+    >
+      {incoming ? (
+        <p className="text-md">
+          {incoming.rows.length} {incoming.rows.length === 1 ? "person" : "people"} found in{" "}
+          <span className="font-medium">{incoming.file}</span>. They will be added when you finish.
+        </p>
+      ) : (
+        problem && (
+          <p role="alert" className="text-md">
+            {problem}
+          </p>
+        )
+      )}
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <Button onClick={() => void choose()} className="!h-9 !px-4">
+          {incoming ? "Choose another file" : "Choose a file"}
+        </Button>
+        {incoming && (
+          <Button variant="ghost" onClick={() => setIncoming(null)} className="!h-9 !px-3">
+            Leave it out
+          </Button>
+        )}
+        <Button variant="primary" onClick={onNext} className="!h-9 !px-4">
+          {incoming ? "OK" : "Skip"} <Check size={15} strokeWidth={1.75} />
         </Button>
         <EnterHint />
       </div>

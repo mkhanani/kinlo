@@ -8,6 +8,7 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 
 /// File name of the database inside the app data folder. Each build channel has its own
 /// folder, so dev and staging builds never open the released app's data.
+pub const DB_FILE: &str = "kinlo.db";
 pub const DB_URL: &str = "sqlite:kinlo.db";
 
 macro_rules! migration {

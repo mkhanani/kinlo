@@ -166,3 +166,93 @@ export async function openDealTotals(): Promise<{ currency: string; total: numbe
       ORDER BY total DESC, d.currency`,
   );
 }
+
+// ── Stages ──────────────────────────────────────────────────────────────────────────────
+//
+// The open stages (Lead, Talking, Proposal to begin with) are the user's to rename, add
+// to, reorder and remove. The two that end a deal, Won and Lost, are fixed: closing a
+// deal, the Home totals and the 30-day view all depend on them.
+
+/** More columns than this do not fit a board anyone can read. */
+export const MAX_OPEN_STAGES = 8;
+
+/** Puts the open stages 1, 2, 3... in their current order, with Won and Lost after them. */
+async function renumberStages(): Promise<void> {
+  await db().execute(
+    `UPDATE stages SET position = ranked.place
+       FROM (SELECT id, row_number() OVER (
+                      ORDER BY CASE outcome WHEN 'won' THEN 1 WHEN 'lost' THEN 2 ELSE 0 END, position, name) AS place
+               FROM stages) AS ranked
+      WHERE stages.id = ranked.id`,
+  );
+}
+
+async function nameTaken(name: string, exceptId: string | null): Promise<boolean> {
+  const rows = await db().select<{ id: string }>(
+    "SELECT id FROM stages WHERE lower(trim(name)) = lower($1) AND ($2 IS NULL OR id <> $2)",
+    [name, exceptId],
+  );
+  return rows.length > 0;
+}
+
+/** Adds an open stage after the other open ones, just before Won. */
+export async function createStage(input: string): Promise<Stage> {
+  const name = input.trim();
+  if (!name) throw new Error("A stage needs a name.");
+  if (await nameTaken(name, null)) throw new Error(`There is already a stage called ${name}.`);
+  const stages = await listStages();
+  if (stages.filter((s) => s.outcome === null).length >= MAX_OPEN_STAGES) {
+    throw new Error(`A pipeline can have up to ${MAX_OPEN_STAGES} stages before Won and Lost.`);
+  }
+  const id = newId();
+  // Half a step past the last open stage puts it before Won; renumbering tidies it up.
+  await db().execute(
+    `INSERT INTO stages (id, name, position, outcome)
+     VALUES ($1, $2, (SELECT coalesce(max(position), 0) FROM stages WHERE outcome IS NULL) + 1, NULL)`,
+    [id, name],
+  );
+  await renumberStages();
+  return (await listStages()).find((s) => s.id === id)!;
+}
+
+export async function renameStage(id: string, input: string): Promise<void> {
+  const name = input.trim();
+  if (!name) throw new Error("A stage needs a name.");
+  if (await nameTaken(name, id)) throw new Error(`There is already a stage called ${name}.`);
+  // Won and Lost keep their names: the app and the assistant refer to them by name.
+  await db().execute("UPDATE stages SET name = $2 WHERE id = $1 AND outcome IS NULL", [id, name]);
+}
+
+/** Sets the order of the open stages. Ids that are not open stages are ignored. */
+export async function reorderStages(ids: string[]): Promise<void> {
+  for (const [index, id] of ids.entries()) {
+    await db().execute("UPDATE stages SET position = $2 WHERE id = $1 AND outcome IS NULL", [id, index + 1]);
+  }
+  await renumberStages();
+}
+
+/**
+ * Removes an open stage. It has to be empty first, so no deal is ever moved or lost
+ * without the user doing it, and at least one open stage always remains.
+ */
+export async function deleteStage(id: string): Promise<void> {
+  const stages = await listStages();
+  const stage = stages.find((s) => s.id === id);
+  if (!stage) return;
+  if (stage.outcome !== null) throw new Error(`${stage.name} cannot be removed.`);
+  if (stages.filter((s) => s.outcome === null).length <= 1) {
+    throw new Error("A pipeline needs at least one stage before Won and Lost.");
+  }
+  const [{ n } = { n: 0 }] = await db().select<{ n: number }>("SELECT count(*) AS n FROM deals WHERE stage_id = $1", [id]);
+  if (n > 0) {
+    throw new Error(`${stage.name} still has ${n} ${n === 1 ? "deal" : "deals"}. Move ${n === 1 ? "it" : "them"} to another stage first.`);
+  }
+  await db().execute("DELETE FROM stages WHERE id = $1 AND outcome IS NULL", [id]);
+  await renumberStages();
+}
+
+/** How many deals each stage holds, archived people's deals included. */
+export async function countDealsByStage(): Promise<Record<string, number>> {
+  const rows = await db().select<{ stage_id: string; n: number }>("SELECT stage_id, count(*) AS n FROM deals GROUP BY stage_id");
+  return Object.fromEntries(rows.map((row) => [row.stage_id, row.n]));
+}

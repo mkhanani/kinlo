@@ -8,4 +8,5 @@ export * from "./ai";
 export * from "./avatars";
 export * from "./birthdays";
 export * from "./settings";
+export * from "./transfer";
 export { openDatabase } from "./driver";

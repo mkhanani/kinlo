@@ -1,6 +1,7 @@
 mod background;
 mod channel;
 mod db;
+mod files;
 mod keychain;
 mod notifier;
 mod window;
@@ -41,6 +42,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec![background::HIDDEN_ARG]),
@@ -57,6 +59,10 @@ pub fn run() {
             background::quit_app,
             keychain::set_key,
             keychain::get_key,
+            files::save_text_file,
+            files::pick_text_file,
+            files::data_location,
+            files::open_data_folder,
         ])
         .setup(move |app| {
             if let Some(main) = app.get_webview_window("main") {

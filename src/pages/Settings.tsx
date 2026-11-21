@@ -11,11 +11,14 @@ import { SettingRow as Row } from "@/components/ui/SettingRow";
 import { Switch } from "@/components/ui/Switch";
 import type { SidesChoice, ThemePref } from "@/data/settings";
 import { AssistantSettings } from "@/features/assistant/AssistantSettings";
-import { isTauri } from "@/lib/platform";
+import { DataSettings } from "@/features/transfer/DataSettings";
+import { isTauri, modKey } from "@/lib/platform";
+import { useUI } from "@/store/ui";
 
 export function SettingsPage() {
   const { theme, sides, userName, defaultCurrency } = useSettings();
   const save = useSaveSetting();
+  const openShortcuts = useUI((s) => s.setShortcutsOpen);
   const [name, setName] = useState(userName ?? "");
   useEffect(() => setName(userName ?? ""), [userName]);
   const [currency, setCurrency] = useState(defaultCurrency);
@@ -93,6 +96,9 @@ export function SettingsPage() {
             ))}
           </div>
         </Row>
+        <Row label="Keyboard shortcuts" hint={`Press ${modKey} / at any time to see them.`}>
+          <Button onClick={() => openShortcuts(true)}>Show</Button>
+        </Row>
         <Row label="Welcome setup" hint="Go through the first-run questions again. Your people and data are not touched.">
           <Button onClick={() => save("onboarded", false)}>Run again</Button>
         </Row>
@@ -101,6 +107,8 @@ export function SettingsPage() {
       <AssistantSettings />
 
       {isTauri && <NotificationSettings />}
+
+      <DataSettings />
     </Page>
   );
 }
