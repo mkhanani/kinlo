@@ -81,8 +81,10 @@ export async function runTurn(options: TurnOptions): Promise<ModelMessage[]> {
       toolApproval: approvals,
       stopWhen: isStepCount(MAX_STEPS),
       abortSignal: cut.signal,
-      // One try, so a wrong key or a missing model is reported at once.
-      maxRetries: 1,
+      // No retry behind the scenes. Told "slow down", the SDK would wait as long as the
+      // provider asks, up to a minute, and try again, all while the panel shows nothing but
+      // its working dots. The reason is shown at once instead, with a Try again button.
+      maxRetries: 0,
       // Failures are shown to the user by the caller. Keep them out of the console.
       onError: () => {},
     });
