@@ -122,6 +122,29 @@ function press(key) {
   }
 }
 
+/** True once the app's window exists. */
+function windowIsUp() {
+  try {
+    if (os === "win32") {
+      return powershell(`$w=New-Object -ComObject WScript.Shell; $w.AppActivate('${WINDOW_TITLE}')`).trim() === "True";
+    }
+    if (os === "darwin") {
+      return Number(osascript(`tell application "System Events" to count (windows of (first process whose name is "kinlo"))`).trim()) > 0;
+    }
+    return run("xdotool", ["search", "--onlyvisible", "--name", WINDOW_TITLE]).trim().length > 0;
+  } catch {
+    return false; // not there yet
+  }
+}
+
+/** Waits for the window, for up to a minute, then lets the first screen settle. */
+async function waitForWindow() {
+  const from = Date.now();
+  while (!windowIsUp() && exited === null && Date.now() - from < 60_000) await sleep(1000);
+  log(`window ${windowIsUp() ? "appeared" : "did not appear"} after ${Math.round((Date.now() - from) / 1000)}s`);
+  await sleep(5000);
+}
+
 if (!existsSync(binary)) {
   console.error(`[smoke] No app at ${binary}. Build it first.`);
   process.exit(1);
@@ -231,7 +254,8 @@ if (existsSync(database) && aliveAtEnd && keyboardWorks) {
     db.close();
 
     const second = launch();
-    await sleep(9000);
+    // A second start can be much slower than the first to show its window.
+    await waitForWindow();
     focus();
     await sleep(600);
 

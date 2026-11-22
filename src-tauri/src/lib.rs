@@ -74,6 +74,7 @@ pub fn run() {
             if let Some(main) = app.get_webview_window("main") {
                 let _ = main.set_title(channel.window_title());
                 window::apply_effects(&main);
+                window::disable_browser_shortcuts(&main);
             }
             // The window starts hidden in the config and is shown here, unless the app
             // was started at login and should wait quietly in the tray.
