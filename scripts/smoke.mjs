@@ -100,20 +100,21 @@ function type(text) {
   }
 }
 
-/** Presses Enter, or the palette shortcut (Ctrl+K, Cmd+K on macOS). */
+/** Presses Enter, or a shortcut: the palette (Ctrl+K) or the assistant (Ctrl+J). Cmd on macOS. */
 function press(key) {
+  const letter = key === "assistant" ? "j" : "k";
   try {
     if (os === "win32") {
-      const keys = key === "enter" ? "{ENTER}" : "^k";
+      const keys = key === "enter" ? "{ENTER}" : `^${letter}`;
       powershell(`$w=New-Object -ComObject WScript.Shell; $null=$w.AppActivate('${WINDOW_TITLE}'); Start-Sleep -Milliseconds 200; $w.SendKeys('${keys}')`);
     } else if (os === "darwin") {
       osascript(
         key === "enter"
           ? `tell application "System Events" to key code 36`
-          : `tell application "System Events" to keystroke "k" using command down`,
+          : `tell application "System Events" to keystroke "${letter}" using command down`,
       );
     } else {
-      run("xdotool", ["key", key === "enter" ? "Return" : "ctrl+k"]);
+      run("xdotool", ["key", key === "enter" ? "Return" : `ctrl+${letter}`]);
     }
   } catch (error) {
     keyboardWorks = false;
@@ -130,14 +131,20 @@ log(`system: ${os}, app: ${binary}`);
 log(`data folder: ${dataDir}`);
 
 let exited = null;
-const app = spawn(binary, [], {
-  stdio: ["ignore", "pipe", "pipe"],
-  env: { ...process.env, WEBKIT_DISABLE_DMABUF_RENDERER: "1", WEBKIT_DISABLE_COMPOSITING_MODE: "1" },
-});
 let appOutput = "";
-app.stdout.on("data", (chunk) => (appOutput += chunk));
-app.stderr.on("data", (chunk) => (appOutput += chunk));
-app.on("exit", (code, signal) => (exited = { code, signal }));
+/** Starts the app and collects what it prints. */
+function launch() {
+  exited = null;
+  const child = spawn(binary, [], {
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, WEBKIT_DISABLE_DMABUF_RENDERER: "1", WEBKIT_DISABLE_COMPOSITING_MODE: "1" },
+  });
+  child.stdout.on("data", (chunk) => (appOutput += chunk));
+  child.stderr.on("data", (chunk) => (appOutput += chunk));
+  child.on("exit", (code, signal) => (exited = { code, signal }));
+  return child;
+}
+const app = launch();
 
 // The first start is the slowest: the web view starts up and the database is created.
 // Wait until the app has made its database (it does that before showing anything), for
@@ -185,6 +192,46 @@ shot("4-person");
 const aliveAtEnd = exited === null;
 app.kill();
 await sleep(1500);
+
+// The assistant, start to finish, against a stand-in model on this machine: a question
+// goes out, the answer is streamed back, a tool runs, and the reply is saved. Nothing
+// leaves the computer and no key is needed. The stand-in is connected by writing the same
+// three settings the Settings screen writes, while the app is closed.
+let assistantTried = false;
+if (existsSync(database) && aliveAtEnd && keyboardWorks) {
+  assistantTried = true;
+  const model = spawn(process.execPath, [join(root, "scripts", "fake-model.mjs")], { stdio: "ignore" });
+  try {
+    const { DatabaseSync } = await import("node:sqlite");
+    const db = new DatabaseSync(database);
+    const save = db.prepare(
+      "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    );
+    save.run("aiProvider", JSON.stringify("ollama"));
+    save.run("aiBaseUrl", JSON.stringify("http://127.0.0.1:11500"));
+    save.run("aiModel", JSON.stringify("fake-1"));
+    db.close();
+
+    const second = launch();
+    await sleep(9000);
+    focus();
+    await sleep(600);
+    press("assistant");
+    await sleep(1500);
+    type("who should I catch up with");
+    await sleep(500);
+    press("enter");
+    // Two requests and a lookup. A healthy app answers in a second or two.
+    await sleep(15000);
+    shot("5-assistant");
+    second.kill();
+    await sleep(1500);
+  } catch (error) {
+    log("assistant step failed:", String(error.message).split("\n")[0]);
+  } finally {
+    model.kill();
+  }
+}
 writeFileSync(join(out, "app-output.txt"), appOutput);
 
 // What the app left behind.
@@ -200,6 +247,9 @@ const result = {
   onboarded: false,
   sides: null,
   people: [],
+  assistantTried,
+  assistantAsked: false,
+  assistantAnswered: false,
 };
 
 if (result.databaseCreated) {
@@ -210,6 +260,12 @@ if (result.databaseCreated) {
   result.onboarded = settings.onboarded === true;
   result.sides = settings.sides ?? null;
   result.people = db.prepare("SELECT name FROM contacts").all().map((r) => r.name);
+  const said = db.prepare("SELECT role, content FROM ai_messages ORDER BY rowid").all();
+  result.assistantAsked = said.some((m) => m.role === "user");
+  // The stand-in ends its answer to this question with one of two sentences.
+  result.assistantAnswered = said.some(
+    (m) => m.role === "assistant" && /overdue|caught up/i.test(String(m.content)),
+  );
   db.close();
 }
 result.droveTheApp = result.onboarded && result.people.includes("Ada Lovelace");
@@ -225,6 +281,10 @@ if (result.migrationsApplied !== expectedMigrations) {
   problems.push(`only ${result.migrationsApplied} of ${expectedMigrations} migrations were applied`);
 }
 
+if (result.assistantAsked && !result.assistantAnswered) {
+  problems.push("the assistant was asked a question and no answer was saved");
+}
+
 if (problems.length) {
   console.error("[smoke] FAILED:", problems.join("; "));
   console.error(appOutput.slice(-2000));
@@ -234,4 +294,11 @@ if (!result.droveTheApp) {
   // Shown as a warning on the run, without failing it.
   console.log("::warning::The app started and migrated its database, but the keyboard walk-through did not complete on this system.");
 }
-log(result.droveTheApp ? "PASSED: started, set up and used by keyboard." : "PASSED (start and database only).");
+if (result.droveTheApp && !result.assistantAsked) {
+  console.log("::warning::The assistant could not be tried on this system: the question did not reach it.");
+}
+log(
+  result.droveTheApp
+    ? `PASSED: started, set up and used by keyboard.${result.assistantAnswered ? " The assistant answered." : ""}`
+    : "PASSED (start and database only).",
+);
