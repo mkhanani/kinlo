@@ -141,8 +141,27 @@ function launch() {
   });
   child.stdout.on("data", (chunk) => (appOutput += chunk));
   child.stderr.on("data", (chunk) => (appOutput += chunk));
-  child.on("exit", (code, signal) => (exited = { code, signal }));
+  child.gone = new Promise((done) =>
+    child.on("exit", (code, signal) => {
+      exited = { code, signal };
+      done();
+    }),
+  );
   return child;
+}
+
+/**
+ * Stops the app and waits until it has really gone. Only one copy of kinlo may run, so a
+ * second start made too soon would hand over to the copy that is still closing and exit.
+ */
+async function stop(child) {
+  child.kill();
+  await Promise.race([child.gone, sleep(10_000)]);
+  if (child.exitCode === null && child.signalCode === null) {
+    child.kill("SIGKILL");
+    await Promise.race([child.gone, sleep(5_000)]);
+  }
+  await sleep(1500);
 }
 const app = launch();
 
@@ -190,8 +209,7 @@ await sleep(2500);
 shot("4-person");
 
 const aliveAtEnd = exited === null;
-app.kill();
-await sleep(1500);
+await stop(app);
 
 // The assistant, start to finish, against a stand-in model on this machine: a question
 // goes out, the answer is streamed back, a tool runs, and the reply is saved. Nothing
@@ -216,16 +234,29 @@ if (existsSync(database) && aliveAtEnd && keyboardWorks) {
     await sleep(9000);
     focus();
     await sleep(600);
+
+    // In the panel: two requests and a lookup. A healthy app answers in a second or two.
     press("assistant");
-    await sleep(1500);
+    await sleep(2000);
+    shot("5-panel");
     type("who should I catch up with");
     await sleep(500);
     press("enter");
-    // Two requests and a lookup. A healthy app answers in a second or two.
-    await sleep(15000);
-    shot("5-assistant");
-    second.kill();
+    await sleep(12000);
+    shot("6-answer");
+
+    // Quick add from the palette: a lookup, then a change that waits to be confirmed.
+    press("palette");
+    await sleep(1200);
+    type("please remind me about zoe tomorrow");
     await sleep(1500);
+    press("enter"); // Quick add, the only match for a sentence
+    await sleep(9000);
+    shot("7-quick-add");
+    press("enter"); // confirm the card
+    await sleep(6000);
+    shot("8-quick-add-saved");
+    await stop(second);
   } catch (error) {
     log("assistant step failed:", String(error.message).split("\n")[0]);
   } finally {
@@ -250,6 +281,7 @@ const result = {
   assistantTried,
   assistantAsked: false,
   assistantAnswered: false,
+  quickAddSaved: false,
 };
 
 if (result.databaseCreated) {
@@ -266,6 +298,11 @@ if (result.databaseCreated) {
   result.assistantAnswered = said.some(
     (m) => m.role === "assistant" && /overdue|caught up/i.test(String(m.content)),
   );
+  // Told to "remind" about someone it cannot find, the stand-in first asks to add her.
+  // Either of the things it asks for being saved shows the whole round trip worked.
+  result.quickAddSaved =
+    result.people.some((name) => name.startsWith("Zo")) ||
+    db.prepare("SELECT count(*) AS n FROM reminders WHERE title LIKE 'Call Zo%'").get().n > 0;
   db.close();
 }
 result.droveTheApp = result.onboarded && result.people.includes("Ada Lovelace");
@@ -295,10 +332,13 @@ if (!result.droveTheApp) {
   console.log("::warning::The app started and migrated its database, but the keyboard walk-through did not complete on this system.");
 }
 if (result.droveTheApp && !result.assistantAsked) {
-  console.log("::warning::The assistant could not be tried on this system: the question did not reach it.");
+  console.log("::warning::The assistant panel could not be tried on this system: the question did not reach it.");
+}
+if (result.droveTheApp && result.assistantTried && !result.quickAddSaved) {
+  console.log("::warning::Quick add did not save its reminder on this system. See the screenshots.");
 }
 log(
   result.droveTheApp
-    ? `PASSED: started, set up and used by keyboard.${result.assistantAnswered ? " The assistant answered." : ""}`
+    ? `PASSED: started, set up and used by keyboard.${result.assistantAnswered ? " The assistant answered." : ""}${result.quickAddSaved ? " Quick add saved a reminder." : ""}`
     : "PASSED (start and database only).",
 );
