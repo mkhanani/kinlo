@@ -23,30 +23,3 @@ pub fn apply_effects(window: &tauri::WebviewWindow) {
         );
     }
 }
-
-/// On Windows the web view keeps a browser's own shortcuts: Ctrl+J for its downloads list,
-/// Ctrl+R and F5 to reload, Ctrl+P to print, Ctrl+F to find. kinlo is not a browser, and
-/// Ctrl+J is how the assistant is opened, so they are turned off. Copy, paste, undo,
-/// select all and moving around in text are not affected. Other systems have none of these.
-#[allow(unused_variables)]
-pub fn disable_browser_shortcuts(window: &tauri::WebviewWindow) {
-    #[cfg(target_os = "windows")]
-    {
-        let _ = window.with_webview(|webview| {
-            use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
-            use windows_core::Interface;
-            // SAFETY: plain calls on the web view this window owns, made on its own thread.
-            unsafe {
-                let Ok(core) = webview.controller().CoreWebView2() else {
-                    return;
-                };
-                let Ok(settings) = core.Settings() else {
-                    return;
-                };
-                if let Ok(settings) = settings.cast::<ICoreWebView2Settings3>() {
-                    let _ = settings.SetAreBrowserAcceleratorKeysEnabled(false);
-                }
-            }
-        });
-    }
-}

@@ -37,12 +37,6 @@ tauri-plugin-updater = "2.14.1"
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
 window-vibrancy = "0.8.1"
 
-# To turn off the browser shortcuts the Windows web view keeps for itself. Same versions
-# as the web view library already uses, so nothing new is downloaded.
-[target.'cfg(target_os = "windows")'.dependencies]
-webview2-com = "0.39.1"
-windows-core = "0.62"
-
 [profile.release]
 codegen-units = 1
 lto = true
