@@ -219,6 +219,11 @@ function statusOf(error: unknown): number | null {
   return ownStatus(rootError(error));
 }
 
+/** True when the turn was given up because nothing arrived for too long. */
+function isTimeout(error: unknown): boolean {
+  return (rootError(error) as { name?: unknown } | null)?.name === "TurnTimeout";
+}
+
 /** True when the provider answered, but with something the AI SDK could not make sense of. */
 function isUnreadableAnswer(error: unknown): boolean {
   const name = (rootError(error) as { name?: unknown } | null)?.name;
@@ -236,6 +241,7 @@ export function explainError(error: unknown, provider: AiProvider): string {
   if (status === 429) return `${info.label} says you have hit a limit. Try again in a little while, or pick another model.`;
   if (status !== null && status >= 500) return `${info.label} is having trouble right now. Try again in a little while.`;
   if (status !== null) return `${info.label} answered with an error (${status}).`;
+  if (isTimeout(error)) return `${info.label} took too long to answer. Try again.`;
   if (isUnreadableAnswer(error)) return `${info.label} sent an answer kinlo could not read.`;
   if (info.local) return "kinlo could not reach Ollama. Check that it is running on this computer.";
   return `kinlo could not reach ${info.label}. Check your connection.`;

@@ -4,12 +4,49 @@ import { isWriteTool, WRITE_TOOLS } from "./tools";
 /** Lookups in a row before the assistant must answer. Stops a confused model looping. */
 const MAX_STEPS = 8;
 
+/**
+ * How long the provider may stay silent before the turn is given up. A model that is
+ * thinking can be quiet for a while, so this is generous; without any limit a connection
+ * that stalls would leave the assistant "working" for ever.
+ */
+export const SILENCE_LIMIT_MS = 90_000;
+
+/** Thrown when the provider sent nothing for longer than the limit. */
+export class TurnTimeout extends Error {
+  constructor(readonly seconds: number) {
+    super(`No answer arrived for ${seconds} seconds.`);
+    this.name = "TurnTimeout";
+  }
+}
+
+/** Settles like the promise, unless it takes longer than the limit: then it gives up. */
+function within<T>(promise: Promise<T>, ms: number, giveUp: () => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      giveUp();
+      reject(new TurnTimeout(Math.round(ms / 1000)));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 export interface TurnOptions {
   model: LanguageModel;
   instructions: string;
   messages: ModelMessage[];
   tools: ToolSet;
   signal?: AbortSignal;
+  /** Overrides SILENCE_LIMIT_MS. For tests. */
+  silenceMs?: number;
   /** Called with each piece of text as it arrives. */
   onText?: (delta: string) => void;
   /** Called when the assistant starts using a tool. */
@@ -29,6 +66,12 @@ export async function runTurn(options: TurnOptions): Promise<ModelMessage[]> {
     WRITE_TOOLS.filter((name) => name in options.tools).map((name) => [name, "user-approval" as const]),
   );
   let text = "";
+  // One signal for both ways a turn is cut short: the user pressing stop, and silence.
+  const cut = new AbortController();
+  const stopped = () => cut.abort();
+  if (options.signal?.aborted) cut.abort();
+  options.signal?.addEventListener("abort", stopped);
+  const limit = options.silenceMs ?? SILENCE_LIMIT_MS;
   try {
     const result = streamText({
       model: options.model,
@@ -37,13 +80,18 @@ export async function runTurn(options: TurnOptions): Promise<ModelMessage[]> {
       tools: options.tools,
       toolApproval: approvals,
       stopWhen: isStepCount(MAX_STEPS),
-      abortSignal: options.signal,
+      abortSignal: cut.signal,
       // One try, so a wrong key or a missing model is reported at once.
       maxRetries: 1,
       // Failures are shown to the user by the caller. Keep them out of the console.
       onError: () => {},
     });
-    for await (const part of result.fullStream) {
+    // Read piece by piece, so the clock restarts whenever anything at all arrives.
+    const parts = result.fullStream[Symbol.asyncIterator]();
+    for (;;) {
+      const next = await within(parts.next(), limit, () => cut.abort());
+      if (next.done) break;
+      const part = next.value;
       if (part.type === "text-delta") {
         text += part.text;
         options.onText?.(part.text);
@@ -53,11 +101,13 @@ export async function runTurn(options: TurnOptions): Promise<ModelMessage[]> {
         throw part.error;
       }
     }
-    return (await result.responseMessages) as ModelMessage[];
+    return (await within(Promise.resolve(result.responseMessages), limit, () => cut.abort())) as ModelMessage[];
   } catch (error) {
     // Stopped by the user: keep whatever had been written so far.
     if (options.signal?.aborted) return text.trim() ? [{ role: "assistant", content: text }] : [];
     throw error;
+  } finally {
+    options.signal?.removeEventListener("abort", stopped);
   }
 }
 

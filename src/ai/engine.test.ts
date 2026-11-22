@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { MockLanguageModelV4 } from "ai/test";
-import type { ModelMessage } from "ai";
+import { simulateReadableStream, type ModelMessage } from "ai";
 import * as data from "@/data";
 import { useTestDatabase } from "@/data/testing";
-import { approvalMessage, cancelledMessage, pendingApprovals, runTurn, toView } from "./engine";
+import { approvalMessage, cancelledMessage, pendingApprovals, runTurn, toView, TurnTimeout } from "./engine";
+import { errorDetail, explainError } from "./providers";
 import { scriptedModel, type Scripted } from "./testing";
 import { buildTools } from "./tools";
 
@@ -260,5 +261,90 @@ describe("the assistant's tools", () => {
     const moved = await data.getDeal(deal!.id);
     expect(moved?.stage_id).toBe("stage-won");
     expect(moved?.closed_at).not.toBeNull();
+  });
+});
+
+describe("a provider that goes silent", () => {
+  /** A model whose answer starts, optionally says something, then never continues. */
+  function stalling(firstWords: string | null) {
+    return new MockLanguageModelV4({
+      doStream: async () => ({
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: "stream-start", warnings: [] });
+            if (firstWords !== null) {
+              controller.enqueue({ type: "text-start", id: "t" });
+              controller.enqueue({ type: "text-delta", id: "t", delta: firstWords });
+            }
+            // ...and then nothing, with the stream left open.
+          },
+        }) as never,
+      }),
+    });
+  }
+
+  it("is given up on, instead of leaving the assistant working for ever", async () => {
+    const failure = await runTurn({
+      model: stalling(null),
+      instructions: "x",
+      messages: [{ role: "user", content: "Hello" }],
+      tools: {},
+      silenceMs: 60,
+    }).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(TurnTimeout);
+    expect(explainError(failure, "google")).toBe("Google took too long to answer. Try again.");
+    expect(errorDetail(new TurnTimeout(90), "google")).toBe("Details: No answer arrived for 90 seconds.");
+  });
+
+  it("is also given up on when it stops halfway through an answer", async () => {
+    const heard: string[] = [];
+    await expect(
+      runTurn({
+        model: stalling("Let me"),
+        instructions: "x",
+        messages: [{ role: "user", content: "Hello" }],
+        tools: {},
+        silenceMs: 60,
+        onText: (delta) => heard.push(delta),
+      }),
+    ).rejects.toBeInstanceOf(TurnTimeout);
+    expect(heard.join("")).toBe("Let me");
+  });
+
+  it("does not cut off an answer that keeps arriving, however long it takes overall", async () => {
+    const slow = new MockLanguageModelV4({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunkDelayInMs: 30,
+          chunks: [
+            { type: "stream-start", warnings: [] },
+            { type: "text-start", id: "t" },
+            ...["One ", "two ", "three ", "four ", "five."].map((delta) => ({ type: "text-delta", id: "t", delta })),
+            { type: "text-end", id: "t" },
+            {
+              type: "finish",
+              finishReason: { unified: "stop", raw: undefined },
+              logprobs: undefined,
+              usage: {
+                inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 1, text: 1, reasoning: undefined },
+              },
+            },
+          ] as never[],
+        }),
+      }),
+    });
+    // Eight pieces 30ms apart take far longer than the 100ms limit in total.
+    const added = await runTurn({
+      model: slow,
+      instructions: "x",
+      messages: [{ role: "user", content: "Count" }],
+      tools: {},
+      silenceMs: 100,
+    });
+    expect(JSON.stringify(added)).toContain("One two three four five.");
   });
 });
