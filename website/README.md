@@ -19,6 +19,7 @@ Then open `http://localhost:4173`.
 | `assets/img/*-light.webp`, `*-dark.webp` | Screenshots of the real app, taken with example data. |
 | `assets/img/photo-*.webp` | Three black-and-white photographs. They were generated with an AI image model, not taken with a camera, and show nobody real. |
 | `assets/fonts/` | Inter, Inter Tight and Geist Mono, served from here, with their licences (SIL Open Font License 1.1). |
+| The six logos under "Bring your own AI model" | Drawn inside `index.html`, in the page's grey. The shapes come from [Lobe Icons](https://github.com/lobehub/lobe-icons) 1.106.0 (MIT). The logos themselves belong to Anthropic, OpenAI, Google, Ollama, LM Studio and OpenRouter, and are shown only to say which services kinlo can talk to. |
 
 ## What the page does and does not do
 
