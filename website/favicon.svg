@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- The app icon at 16 to 48px, where it sits in a taskbar or a file list. The tile
+       fills the square and the rings are much heavier, so it still reads as two rings. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2c2c30"/>
+      <stop offset="1" stop-color="#101012"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1024" height="1024" rx="210" fill="url(#bg)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="112">
+    <circle cx="392" cy="512" r="222"/>
+    <circle cx="632" cy="512" r="222"/>
+  </g>
+</svg>
