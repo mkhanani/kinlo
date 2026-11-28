@@ -74,7 +74,9 @@ Model names are fetched from the provider once a key is saved. If that fails, a 
 
 The panel says what happened in plain words: the key was refused, the model was not found, a limit was hit, the provider is having trouble, or there is no connection. Under that it shows what the provider itself said, shortened, because that is often the only way to tell a spent quota from a model the key cannot use.
 
-The SDK tries a busy or rate-limited request once more before giving up, and wraps the provider's answer when it does. `explainError` and `errorDetail` in `src/ai/providers.ts` unwrap that, so a limit is not mistaken for a lost connection. The provider's words are passed through `redact`, which removes the saved key and anything shaped like one. They are shown on screen only: never saved and never logged.
+kinlo does not retry behind the scenes. Left to itself the SDK would wait as long as a provider asks, up to a minute, before trying a rate-limited request again, and the panel would show only its working dots. The reason is shown straight away instead, with a Try again button. If nothing at all arrives for 90 seconds, the turn is given up and the panel says the provider took too long (`SILENCE_LIMIT_MS` in `src/ai/engine.ts`).
+
+`explainError` and `errorDetail` in `src/ai/providers.ts` also unwrap errors that the SDK has wrapped, so a limit is never mistaken for a lost connection. The provider's words are passed through `redact`, which removes the saved key and anything shaped like one. They are shown on screen only: never saved and never logged.
 
 In the app, requests go through Tauri's HTTP plugin (`src/ai/http.ts`), because providers do not accept calls made directly from a web page. The plugin is allowed to reach any `http` or `https` address, which is what a custom address needs; kinlo's own code only ever calls the provider that is configured.
 

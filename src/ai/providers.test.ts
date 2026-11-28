@@ -186,9 +186,37 @@ describe("a real provider adapter, with the network replaced", () => {
     return { calls, failure };
   }
 
+  it("does not wait and retry when told to slow down, however long the provider suggests", async () => {
+    let calls = 0;
+    const google = createGoogleGenerativeAI({
+      apiKey: "AIzaSyTESTKEY1234567890",
+      fetch: async () => {
+        calls++;
+        return new Response(JSON.stringify({ error: { code: 429, message: "Please retry in 45s.", status: "X" } }), {
+          status: 429,
+          headers: { "content-type": "application/json", "retry-after": "45" },
+        });
+      },
+    });
+    const started = Date.now();
+    const failure = await runTurn({
+      model: google("gemini-test"),
+      instructions: "x",
+      messages: [{ role: "user", content: "Hello" }],
+      tools: {},
+    }).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(calls).toBe(1);
+    expect(explainError(failure, "google")).toContain("hit a limit");
+    expect(errorDetail(failure, "google")).toBe("Google said: Please retry in 45s.");
+  });
+
   it("reports a spent quota as a limit, with Google's reason", async () => {
     const { calls, failure } = await ask(429, "Quota exceeded for metric: free_tier_requests, limit: 0");
-    expect(calls).toBe(2); // tried again once, as intended
+    expect(calls).toBe(1); // reported at once, not retried behind the scenes
     expect(explainError(failure, "google")).toContain("hit a limit");
     expect(errorDetail(failure, "google", ["AIzaSyTESTKEY1234567890"])).toBe(
       "Google said: Quota exceeded for metric: free_tier_requests, limit: 0",
