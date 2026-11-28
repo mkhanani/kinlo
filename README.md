@@ -11,6 +11,11 @@
   No account, no server, no tracking. Everything stays on your computer.
 </p>
 
+<p align="center">
+  <a href="https://kinlo-website.vercel.app"><strong>Website</strong></a> ·
+  <a href="https://github.com/mkhanani/kinlo/releases/latest"><strong>Download</strong></a>
+</p>
+
 ![kinlo's Home screen](docs/screenshots/readme-home-dark.png)
 
 kinlo keeps track of the people in your life and the people you work with: who they are, when you last spoke, what was said, and what you meant to do next. It runs on Windows, macOS and Linux.
