@@ -14,7 +14,8 @@ export function useHasKey(provider: AiProvider | null) {
   return useQuery({
     queryKey: keyQuery(provider),
     queryFn: async () => (provider ? (await getKey(provider)) !== null : false),
-    enabled: provider !== null,
+    // A provider that takes no key never needs the keychain to be asked.
+    enabled: provider !== null && PROVIDERS[provider].needsKey,
   });
 }
 
@@ -34,7 +35,7 @@ export function useSaveKey() {
 export function useModels(provider: AiProvider | null, baseUrl: string | null, enabled: boolean) {
   return useQuery({
     queryKey: ["ai", "models", provider, cleanBaseUrl(baseUrl)] as const,
-    queryFn: async () => listModels(provider!, await getKey(provider!), baseUrl),
+    queryFn: async () => listModels(provider!, PROVIDERS[provider!].needsKey ? await getKey(provider!) : null, baseUrl),
     enabled: provider !== null && enabled,
     staleTime: 5 * 60_000,
   });

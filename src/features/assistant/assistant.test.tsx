@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { setModelFactory } from "@/ai/chat";
+import * as keys from "@/ai/keys";
 import { clearMemoryKeys, getKey, setKey } from "@/ai/keys";
 import { scriptedModel, type Scripted } from "@/ai/testing";
 import * as data from "@/data";
@@ -189,6 +190,18 @@ describe("Assistant panel", () => {
     fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
     expect(await panel().findByText("Hello again.")).toBeInTheDocument();
     expect(panel().queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("answers through a provider that takes no key even when the keychain cannot be reached", async () => {
+    const keychain = vi.spyOn(keys, "getKey").mockRejectedValue("kinlo could not reach your system's keychain.");
+    const scripted = scriptedModel([[{ say: "Nobody is overdue." }]]);
+    setModelFactory(async () => scripted.model);
+    renderApp("/", { aiProvider: "ollama", aiModel: "test-model" });
+    await openPanel();
+    await say("Who should I catch up with?");
+
+    expect(await panel().findByText("Nobody is overdue.")).toBeInTheDocument();
+    expect(keychain).not.toHaveBeenCalled();
   });
 
   it("says why when the provider answers with a limit, instead of blaming the connection", async () => {

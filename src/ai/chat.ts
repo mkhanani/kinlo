@@ -110,7 +110,8 @@ function createChat(options: ChatOptions) {
 
       let key: string | null = null;
       try {
-        key = await getKey(config.provider);
+        // A provider that takes no key (Ollama) must work without a keychain at all.
+        key = info.needsKey ? await getKey(config.provider) : null;
         if (info.needsKey && !key) {
           set({ error: `Add your ${info.label} key in Settings first.` });
           return;
