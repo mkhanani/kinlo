@@ -1,0 +1,4 @@
+
+(kinlo:4762): dbind-WARNING **: 12:26:34.806: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files
+
+(kinlo:4910): dbind-WARNING **: 12:27:33.644: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files
